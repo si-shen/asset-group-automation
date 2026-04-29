@@ -548,7 +548,7 @@
           <button class="btn btn-primary" id="v2ContinueToV3">Continue to V3 →</button>
         </div>
       </div>
-      <p class="subtitle" style="margin: 8px 0 0; text-align:right; font-size:12px;">.xlsx = one workbook with three sheets (rows, pivot, mapping). .csv = three separate files.</p>
+      <p class="subtitle" style="margin: 8px 0 0; text-align:right; font-size:12px;">.xlsx = one workbook with four sheets (rows, block × group pivot, asset group v2 pivot, mapping). .csv = four separate files.</p>
     </section>
   </div>
 
@@ -591,6 +591,11 @@
     <section class="panel hidden" id="v3PanelColumns">
       <h2>Step 2 · Identify columns</h2>
       <p class="subtitle">Pick the <strong>asset group</strong> column and the <strong>property count</strong> column. We'll split the asset group name by <code>|</code>, then ask which piece is the <strong>age band</strong> and which is the <strong>tenure</strong> — those two positions drive the merge logic.</p>
+
+      <div id="v3AggregateNotice" class="hidden" style="margin-bottom:16px; padding:12px 14px; border:1px solid #a3d9b5; background:#e6f7ef; border-radius:8px; font-size:13px; color:#0a5a3c; line-height:1.55;">
+        <strong>Auto-aggregated.</strong>
+        <span id="v3AggregateNoticeText"></span>
+      </div>
 
       <div class="field-row">
         <div class="field">
@@ -1091,16 +1096,41 @@ document.getElementById('v1DownloadXlsx').addEventListener('click', () => v1Down
 document.getElementById('v1DownloadCsv').addEventListener('click', () => v1Download('csv'));
 document.getElementById('v1ContinueToV2').addEventListener('click', v1HandoffToV2);
 
+function v1BuildPivotSheet() {
+  const outCol = 'asset group v1';
+  const counts = new Map();
+  for (const r of v1.outputRows) {
+    const v = fmtVal(r[outCol]);
+    if (!v) continue;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => naturalCompare(a[0], b[0]));
+  const aoa = [['asset group v1', 'count of properties']];
+  for (const [name, n] of sorted) aoa.push([name, n]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 50 }, { wch: 22 }];
+  return ws;
+}
+
 function v1Download(kind) {
   try {
     const outCol = 'asset group v1';
     const headers = [...v1.headers, outCol];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(v1.outputRows, { header: headers });
-    appendSheet(wb, ws, v1.sheetName || 'Sheet1');
-
     const base = (v1.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
-    saveWorkbook(wb, `${base} - with asset group v1.${kind}`, kind);
+
+    if (kind === 'xlsx') {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(v1.outputRows, { header: headers });
+      appendSheet(wb, ws, v1.sheetName || 'Sheet1');
+      appendSheet(wb, v1BuildPivotSheet(), 'asset group v1 pivot');
+      saveWorkbook(wb, `${base} - with asset group v1.xlsx`, 'xlsx');
+    } else {
+      // CSV is single-sheet; emit rows only.
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(v1.outputRows, { header: headers });
+      appendSheet(wb, ws, v1.sheetName || 'Sheet1');
+      saveWorkbook(wb, `${base} - with asset group v1.csv`, 'csv');
+    }
   } catch (err) {
     console.error('v1 export failed:', err);
     alert('Could not build the file: ' + (err && err.message ? err.message : err));
@@ -1374,6 +1404,22 @@ function v2BuildMappingSheet() {
   return ws;
 }
 
+function v2BuildGroupPivotSheet() {
+  const v2Col = 'asset group v2';
+  const counts = new Map();
+  for (const r of v2.mergedRows) {
+    const v = fmtVal(r[v2Col]);
+    if (!v) continue;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => naturalCompare(a[0], b[0]));
+  const aoa = [['asset group v2', 'count of properties']];
+  for (const [name, n] of sorted) aoa.push([name, n]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 60 }, { wch: 22 }];
+  return ws;
+}
+
 /* ---------- Excel sheet-name sanitizer ----------
    Excel sheet names must be 1-31 chars, can't contain : \ / ? * [ ],
    can't start/end with an apostrophe, and 'History' is reserved. */
@@ -1427,9 +1473,10 @@ function downloadV2AllXlsx() {
       return;
     }
     const wb = XLSX.utils.book_new();
-    appendSheet(wb, v2BuildRowsSheet(),    v2.sheetName || 'Properties');
-    appendSheet(wb, v2BuildPivotSheet(),   'Pivot Table 1');
-    appendSheet(wb, v2BuildMappingSheet(), 'v1 to v2 mapping');
+    appendSheet(wb, v2BuildRowsSheet(),       v2.sheetName || 'Properties');
+    appendSheet(wb, v2BuildPivotSheet(),      'Pivot Table 1');
+    appendSheet(wb, v2BuildGroupPivotSheet(), 'asset group v2 pivot');
+    appendSheet(wb, v2BuildMappingSheet(),    'v1 to v2 mapping');
 
     const base = (v2.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
     saveWorkbook(wb, `${base} - asset group v2.xlsx`, 'xlsx');
@@ -1450,9 +1497,10 @@ function downloadV2AllCsv() {
 
     // Each CSV is its own one-sheet workbook so XLSX.writeFile can emit it.
     const files = [
-      { sheet: v2BuildRowsSheet(),    name: `${base} - rows.csv` },
-      { sheet: v2BuildPivotSheet(),   name: `${base} - pivot.csv` },
-      { sheet: v2BuildMappingSheet(), name: `${base} - mapping.csv` },
+      { sheet: v2BuildRowsSheet(),       name: `${base} - rows.csv` },
+      { sheet: v2BuildPivotSheet(),      name: `${base} - pivot.csv` },
+      { sheet: v2BuildGroupPivotSheet(), name: `${base} - asset group v2 pivot.csv` },
+      { sheet: v2BuildMappingSheet(),    name: `${base} - mapping.csv` },
     ];
 
     files.forEach((f, i) => {
@@ -1511,11 +1559,16 @@ function v2HandoffToV3() {
   document.getElementById('v3DropZone').classList.add('hidden');
   document.getElementById('v3FileInfo').classList.remove('hidden');
   document.getElementById('v3FileName').textContent = (v3.fileName || 'asset-groups') + ' (from section 2)';
-  document.getElementById('v3FileSummary').textContent =
-    `${rows.length.toLocaleString()} asset groups · aggregated from V2 merged rows`;
+  document.getElementById('v3FileSummary').innerHTML =
+    `${v2.mergedRows.length.toLocaleString()} property rows · auto-aggregated to ` +
+    `<strong>${rows.length.toLocaleString()} asset groups</strong>`;
 
   setSection('v3');
   v3PopulateColumnSelectors();
+  v3ShowAggregateNotice(
+    { agCol: assetCol, propertyCount: v2.mergedRows.length, groupCount: rows.length },
+    'v2'
+  );
   setV3Step(2);
 }
 
@@ -2108,6 +2161,7 @@ document.getElementById('v3ChangeFile').addEventListener('click', () => {
   document.getElementById('v3FileInfo').classList.add('hidden');
   document.getElementById('v3DropZone').classList.remove('hidden');
   v3FileInput.value = '';
+  v3HideAggregateNotice();
 });
 
 async function v3HandleFile(file) {
@@ -2120,16 +2174,92 @@ async function v3HandleFile(file) {
     v3.rows = rows;
 
     document.getElementById('v3FileName').textContent = file.name;
-    document.getElementById('v3FileSummary').textContent =
-      `${rows.length.toLocaleString()} rows · ${headers.length} columns · sheet "${sheetName}"`;
     document.getElementById('v3DropZone').classList.add('hidden');
     document.getElementById('v3FileInfo').classList.remove('hidden');
+
+    const detection = v3DetectPropertyLevel();
+    if (detection) {
+      v3ApplyAutoAggregate(detection);
+      document.getElementById('v3FileSummary').innerHTML =
+        `${detection.propertyCount.toLocaleString()} property rows · auto-aggregated to ` +
+        `<strong>${detection.groupCount.toLocaleString()} asset groups</strong> · sheet "${escapeHtml(sheetName)}"`;
+      v3ShowAggregateNotice(detection, 'upload');
+    } else {
+      document.getElementById('v3FileSummary').textContent =
+        `${rows.length.toLocaleString()} rows · ${headers.length} columns · sheet "${sheetName}"`;
+      v3HideAggregateNotice();
+    }
 
     v3PopulateColumnSelectors();
     setV3Step(2);
   } catch (err) {
     alert('Could not read file: ' + err.message);
   }
+}
+
+/* ---------- V3 auto-aggregation: detect property-level uploads ---------- */
+function v3DetectPropertyLevel() {
+  if (!v3.rows || !v3.rows.length || !v3.headers || !v3.headers.length) return null;
+
+  // Pick best asset-group candidate (same rule as the column auto-detect).
+  let agCol = v3.headers.find(h => /asset\s*group/i.test(h));
+  if (!agCol) {
+    agCol = v3.headers.find(h => {
+      for (const r of v3.rows) {
+        const v = r[h];
+        if (v != null && String(v).indexOf('|') >= 0) return true;
+      }
+      return false;
+    });
+  }
+  if (!agCol) return null;
+
+  const counts = new Map();
+  let nonEmpty = 0;
+  for (const r of v3.rows) {
+    const v = String(r[agCol] ?? '').trim();
+    if (!v) continue;
+    nonEmpty++;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  if (!counts.size) return null;
+  // Already aggregated if every row is roughly unique (avg group size < 1.5).
+  if (nonEmpty / counts.size < 1.5) return null;
+  return { agCol, propertyCount: nonEmpty, groupCount: counts.size, counts };
+}
+
+function v3ApplyAutoAggregate(detection) {
+  const countCol = 'count of properties';
+  const rows = [...detection.counts.entries()].map(([name, n]) => ({
+    [detection.agCol]: name,
+    [countCol]: n,
+  }));
+  v3.rows = rows;
+  v3.headers = [detection.agCol, countCol];
+  v3.assetGroupCol = detection.agCol;
+  v3.countCol = countCol;
+}
+
+function v3ShowAggregateNotice(detection, source) {
+  const banner = document.getElementById('v3AggregateNotice');
+  const text = document.getElementById('v3AggregateNoticeText');
+  if (!banner || !text) return;
+  const sourceLabel = source === 'v2'
+    ? 'the V2 output'
+    : 'your uploaded sheet';
+  text.innerHTML =
+    ` We detected that ${sourceLabel} is property-level (one row per property). ` +
+    `It's been aggregated into <strong>${detection.groupCount.toLocaleString()} asset groups</strong> ` +
+    `from <strong>${detection.propertyCount.toLocaleString()} property rows</strong>, using ` +
+    `<code>${escapeHtml(detection.agCol)}</code> as the group name. The property count for each group ` +
+    `is in the auto-added <code>count of properties</code> column. Other columns from the original sheet ` +
+    `are not needed for V3 and have been dropped.`;
+  banner.classList.remove('hidden');
+}
+
+function v3HideAggregateNotice() {
+  const banner = document.getElementById('v3AggregateNotice');
+  if (banner) banner.classList.add('hidden');
 }
 
 /* ---------- V3 UI: column selection ---------- */
@@ -2493,6 +2623,19 @@ function v3RenderMergeTable() {
 /* ---------- V3 export ---------- */
 document.getElementById('v3DownloadXlsx').addEventListener('click', downloadV3Xlsx);
 
+function v3BuildPivotSheet() {
+  const counts = new Map();
+  for (const g of v3.processor.groups) {
+    counts.set(g.mergedAssetGroup, (counts.get(g.mergedAssetGroup) || 0) + g.properties);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => naturalCompare(a[0], b[0]));
+  const aoa = [['asset group v3', 'count of properties']];
+  for (const [name, n] of sorted) aoa.push([name, n]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 60 }, { wch: 22 }];
+  return ws;
+}
+
 function downloadV3Xlsx() {
   try {
     if (!v3.processor || !v3.processor.groups || !v3.processor.groups.length) {
@@ -2533,6 +2676,7 @@ function downloadV3Xlsx() {
     ws['!cols'] = header.map(h => ({ wch: Math.max(16, h.length + 2) }));
     const wb = XLSX.utils.book_new();
     appendSheet(wb, ws, 'Consolidated');
+    appendSheet(wb, v3BuildPivotSheet(), 'asset group v3 pivot');
     const base = (v3.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
     saveWorkbook(wb, `${base} - asset group v3.xlsx`, 'xlsx');
   } catch (err) {
