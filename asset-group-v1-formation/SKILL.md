@@ -36,17 +36,18 @@ If the user asks for v2/v3/v4 behaviour while this skill is active, stop and tel
 
 In social housing and property portfolio management, "asset groups" (a.k.a. archetypes) are coarse buckets used for stock condition analysis, component life-cycle planning, decarbonisation modelling, and investment appraisal. V1 is the raw starting point — a faithful concatenation of whichever attributes the user considers defining. Later versions refine v1 using business rules, but those refinements only make sense on top of a clean v1, which is what this skill produces.
 
-## The workflow (3 steps)
+## The workflow (4 steps)
 
-Always present the workflow as three clear steps so the user can follow along.
+Always present the workflow as four clear steps so the user can follow along.
 
 1. **Read the spreadsheet and list every column.** Pull the header row from the sheet (including duplicate header names — yes, real property sheets often have two columns both called "Property Type", one a shape category and one a form category, and both matter). Show the user a sample value from each column so they can tell them apart.
-2. **Let the user pick the attributes in order.** The `asset group v1` name is a concatenation, so column *order* matters. Capture an ordered list, not an unordered set. Show a live preview built from the first row as soon as the user has selected at least one column, so they can see what a typical v1 group name will look like before committing.
-3. **Generate and export.** Write the `asset group v1` value for every row, then save a new workbook alongside the original (don't overwrite) with that column appended as the last column. Report: total rows, number of unique v1 asset groups, and average properties per group — these stats tell the user immediately whether their chosen granularity is reasonable (one row per group = too fine; two groups covering thousands of rows = too coarse). The unique-count is also the handoff signal for v2: downstream skills typically kick in when v1 produces too many or too few groups to be useful as-is.
+2. **Filter to "In" properties only.** Stock lists carry an `In/Out` column flagging which properties are in scope. Asset groups are built only for rows whose `In/Out` value is `In` (case-insensitive, trimmed); `Out`, blank, and any other values are excluded from v1 generation. Auto-detect the column, let the user override or pick `(none — keep all rows)` if their sheet has no such column, and show running counts (Total / In / Out / Other) before they continue.
+3. **Let the user pick the attributes in order.** The `asset group v1` name is a concatenation, so column *order* matters. Capture an ordered list, not an unordered set. Show a live preview built from the first kept row as soon as the user has selected at least one column, so they can see what a typical v1 group name will look like before committing.
+4. **Generate and export.** Write the `asset group v1` value for every kept ("In") row, then save a new workbook alongside the original (don't overwrite) with that column appended as the last column. Report: total kept rows, number of unique v1 asset groups, and average properties per group — these stats tell the user immediately whether their chosen granularity is reasonable (one row per group = too fine; two groups covering thousands of rows = too coarse). The unique-count is also the handoff signal for v2: downstream skills typically kick in when v1 produces too many or too few groups to be useful as-is.
 
 ## Prefer the bundled HTML UI
 
-There's a ready-made, self-contained browser tool at `assets/asset_group_builder.html`. It runs entirely client-side using SheetJS, walks the user through the three steps above, and exports an `.xlsx` or `.csv` with the `asset group v1` column appended. **This is the default deliverable.** Copy it into the user's workspace folder and give them a `computer://` link so they can open it in their browser.
+There's a ready-made, self-contained browser tool at `assets/asset_group_builder.html`. It runs entirely client-side using SheetJS, walks the user through the four steps above, and exports an `.xlsx` or `.csv` with the `asset group v1` column appended. **This is the default deliverable.** Copy it into the user's workspace folder and give them a `computer://` link so they can open it in their browser.
 
 Reasons to prefer the UI over writing a one-off Python script:
 

@@ -325,6 +325,7 @@
   <div class="section-tabs" id="sectionTabs">
     <button class="section-tab active" data-section="v1"><span class="tab-num">1</span>Asset group V1 formation</button>
     <button class="section-tab" data-section="v2"><span class="tab-num">2</span>Asset group V2 — merge split blocks</button>
+    <button class="section-tab" data-section="v3"><span class="tab-num">3</span>Asset group V3 — merge small groups</button>
   </div>
 
   <!-- ====================================================== -->
@@ -338,8 +339,9 @@
 
     <ol class="steps" id="v1Steps">
       <li class="step active" data-step="1"><span class="step-num">1</span>Upload spreadsheet</li>
-      <li class="step" data-step="2"><span class="step-num">2</span>Select attributes</li>
-      <li class="step" data-step="3"><span class="step-num">3</span>Preview &amp; export</li>
+      <li class="step" data-step="2"><span class="step-num">2</span>Filter In/Out</li>
+      <li class="step" data-step="3"><span class="step-num">3</span>Select attributes</li>
+      <li class="step" data-step="4"><span class="step-num">4</span>Preview &amp; export</li>
     </ol>
 
     <!-- V1 STEP 1: UPLOAD -->
@@ -362,9 +364,35 @@
       </div>
     </section>
 
-    <!-- V1 STEP 2: SELECT COLUMNS -->
+    <!-- V1 STEP 2: FILTER IN/OUT -->
+    <section class="panel hidden" id="v1PanelFilter">
+      <h2>Step 2 · Filter properties (In/Out)</h2>
+      <p class="subtitle">Asset groups are only built for properties marked <strong>In</strong>. Confirm the In/Out column below — we auto-detect when we can. If your sheet doesn't have one, choose <em>(none — keep all rows)</em>.</p>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="v1InOutSelect">In/Out column</label>
+          <select id="v1InOutSelect"></select>
+          <div class="field-hint" id="v1InOutSample"></div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat"><div class="val" id="v1FilterTotal">0</div><div class="lbl">Total rows</div></div>
+        <div class="stat"><div class="val" id="v1FilterIn">0</div><div class="lbl">"In" rows (kept)</div></div>
+        <div class="stat"><div class="val" id="v1FilterOut">0</div><div class="lbl">"Out" rows (excluded)</div></div>
+        <div class="stat"><div class="val" id="v1FilterOther">0</div><div class="lbl">Other / blank (excluded)</div></div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="v1FilterBack">← Back</button>
+        <button class="btn btn-primary" id="v1FilterNext" disabled>Continue →</button>
+      </div>
+    </section>
+
+    <!-- V1 STEP 3: SELECT COLUMNS -->
     <section class="panel hidden" id="v1PanelSelect">
-      <h2>Step 2 · Select attributes for the asset group</h2>
+      <h2>Step 3 · Select attributes for the asset group</h2>
       <p class="subtitle">Click each column you want included. The number on each chip shows the order it will appear in the concatenated asset group name.</p>
 
       <div class="toolbar" style="margin-top: 0; margin-bottom: 8px;">
@@ -390,9 +418,9 @@
       </div>
     </section>
 
-    <!-- V1 STEP 3: PREVIEW & EXPORT -->
+    <!-- V1 STEP 4: PREVIEW & EXPORT -->
     <section class="panel hidden" id="v1PanelExport">
-      <h2>Step 3 · Preview &amp; export</h2>
+      <h2>Step 4 · Preview &amp; export</h2>
       <p class="subtitle">Every row now has an <strong>asset group v1</strong> value. Review below, then download the updated spreadsheet.</p>
 
       <div class="stats-row">
@@ -515,11 +543,167 @@
       <div class="toolbar">
         <button class="btn" id="v2BackToColumns">← Edit columns</button>
         <div class="right">
-          <button class="btn btn-primary" id="v2DownloadAllXlsx">Download .xlsx</button>
+          <button class="btn" id="v2DownloadAllXlsx">Download .xlsx</button>
           <button class="btn" id="v2DownloadAllCsv">Download .csv</button>
+          <button class="btn btn-primary" id="v2ContinueToV3">Continue to V3 →</button>
         </div>
       </div>
       <p class="subtitle" style="margin: 8px 0 0; text-align:right; font-size:12px;">.xlsx = one workbook with three sheets (rows, pivot, mapping). .csv = three separate files.</p>
+    </section>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- SECTION V3: CONSOLIDATE SMALL ASSET GROUPS              -->
+  <!-- ====================================================== -->
+  <div id="sectionV3" class="hidden">
+    <div class="section-header">
+      <h2>Asset group V3 — consolidate small groups</h2>
+      <p>Starting from an aggregated asset-group sheet (one row per asset group, with a property count), merge small groups into adjacent ones that share the same location, building type, and construction — keeping tenures and age bands compatible.</p>
+    </div>
+
+    <ol class="steps" id="v3Steps">
+      <li class="step active" data-step="1"><span class="step-num">1</span>Upload aggregated sheet</li>
+      <li class="step" data-step="2"><span class="step-num">2</span>Identify columns</li>
+      <li class="step" data-step="3"><span class="step-num">3</span>Configure &amp; consolidate</li>
+    </ol>
+
+    <!-- V3 STEP 1: UPLOAD -->
+    <section class="panel" id="v3PanelUpload">
+      <h2>Step 1 · Upload your sheet</h2>
+      <p class="subtitle">Drop a spreadsheet that lists asset groups and how many properties are in each. Asset group names should use <code>|</code> as the separator between attributes (e.g. <code>Accrington | H/B | 1980-1999 | Trad | AR</code>). If you just finished section 2, click <em>Continue to V3</em> there — we'll aggregate the property rows automatically.</p>
+
+      <div class="drop-zone" id="v3DropZone">
+        <p><strong>Drop .xlsx file here</strong> or click to browse</p>
+        <p class="hint">Supports .xlsx, .xlsm, .csv</p>
+        <input type="file" id="v3FileInput" class="file-pick" accept=".xlsx,.xlsm,.csv">
+      </div>
+
+      <div class="file-info hidden" id="v3FileInfo">
+        <div class="meta">
+          <strong id="v3FileName"></strong>
+          <span id="v3FileSummary"></span>
+        </div>
+        <button class="btn-ghost btn" id="v3ChangeFile">Change file</button>
+      </div>
+    </section>
+
+    <!-- V3 STEP 2: IDENTIFY COLUMNS -->
+    <section class="panel hidden" id="v3PanelColumns">
+      <h2>Step 2 · Identify columns</h2>
+      <p class="subtitle">Pick the <strong>asset group</strong> column and the <strong>property count</strong> column. We'll split the asset group name by <code>|</code>, then ask which piece is the <strong>age band</strong> and which is the <strong>tenure</strong> — those two positions drive the merge logic.</p>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="v3AssetGroupSelect">Asset group column</label>
+          <select id="v3AssetGroupSelect"></select>
+          <div class="field-hint" id="v3AssetGroupSample"></div>
+        </div>
+        <div class="field">
+          <label for="v3CountSelect">Properties / count column</label>
+          <select id="v3CountSelect"></select>
+          <div class="field-hint" id="v3CountSample"></div>
+        </div>
+      </div>
+
+      <div id="v3ParsedPreview" class="hidden">
+        <div class="selected-preview">
+          <span class="label">First asset group split by <code>|</code>:</span>
+          <span id="v3ParsedRow"></span>
+        </div>
+
+        <div class="field-row" style="margin-top: 16px;">
+          <div class="field">
+            <label for="v3AgeBandSelect">Age band piece</label>
+            <select id="v3AgeBandSelect"></select>
+            <div class="field-hint">Pick which piece of the asset group name is the age band. Choose "None" if your data has no age band — in that case age-adjacency won't block a merge.</div>
+          </div>
+          <div class="field">
+            <label for="v3TenureSelect">Tenure piece</label>
+            <select id="v3TenureSelect"></select>
+            <div class="field-hint">Pick which piece of the asset group name is the tenure (required).</div>
+          </div>
+        </div>
+
+        <div id="v3RowFilterWarn" class="hidden" style="margin-top:12px; padding:12px 14px; border:1px solid #f0c674; background:#fff8e6; border-radius:8px; font-size:13px; color:#6b4f00;"></div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="v3BackToUpload">← Back</button>
+        <button class="btn btn-primary" id="v3GoToConsolidate" disabled>Continue →</button>
+      </div>
+    </section>
+
+    <!-- V3 STEP 3: CONFIGURE + CONSOLIDATE -->
+    <section class="panel hidden" id="v3PanelConsolidate">
+      <h2>Step 3 · Configure &amp; consolidate</h2>
+      <p class="subtitle">Set the small-group threshold, declare which tenures can combine, then run consolidation.</p>
+
+      <div style="margin-bottom: 22px;">
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">
+          Small-group threshold: <span id="v3ThresholdVal" style="font-weight:700; color:var(--accent);">5</span>
+        </label>
+        <input type="range" id="v3Threshold" min="1" max="50" value="5" style="width: 100%; max-width: 420px; display:block;">
+        <div class="field-hint" style="margin-top: 4px;">Groups with fewer than this many properties are considered small and eligible to be merged.</div>
+      </div>
+
+      <div style="margin-bottom: 22px;">
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Mergeable tenure pairs</label>
+        <div class="field-hint" style="margin-bottom: 10px;">Pairs of tenure types that your organisation allows to combine (for example <code>AR</code> with <code>GN</code>). A small group is only merged with a partner whose tenure matches exactly, is inclusive (e.g. <code>GN &amp; AR</code> includes <code>GN</code>), or appears in one of the pairs you list here.</div>
+        <div id="v3TenurePairs"></div>
+        <button class="btn" id="v3AddTenurePair" style="margin-top: 8px;">+ Add pair</button>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="v3AllowPrePost2000" style="margin-top: 3px;">
+          <span>
+            <strong>Allow merging across the year-2000 boundary</strong>
+            <div class="field-hint" style="font-weight:400; margin-top:2px;">Off by default. When off, age bands that end on or before 2000 can't merge with age bands that start on or after 2000.</div>
+          </span>
+        </label>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="v3IncludeInclusive" style="margin-top: 3px;">
+          <span>
+            <strong>Also merge overlapping tenures</strong> (e.g. <code>GN &amp; AR</code> absorbs <code>GN</code>)
+            <div class="field-hint" style="font-weight:400; margin-top:2px;">Off by default. Adds a second pass that runs across the full portfolio — a bit slower on large files.</div>
+          </span>
+        </label>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="v3BackToColumns">← Back</button>
+        <button class="btn btn-primary" id="v3RunBtn">Consolidate asset groups</button>
+      </div>
+
+      <!-- Results -->
+      <div id="v3Results" class="hidden" style="margin-top: 28px;">
+        <h3 style="margin: 0 0 12px; font-size:16px; font-weight:600;">Results</h3>
+
+        <div class="stats-row">
+          <div class="stat"><div class="val" id="v3StatGroupsBefore">0</div><div class="lbl">Groups before</div></div>
+          <div class="stat"><div class="val" id="v3StatGroupsAfter">0</div><div class="lbl">Groups after</div></div>
+          <div class="stat"><div class="val" id="v3StatSmallBefore">0</div><div class="lbl">Small groups before</div></div>
+          <div class="stat"><div class="val" id="v3StatSmallAfter">0</div><div class="lbl">Small groups after</div></div>
+          <div class="stat"><div class="val" id="v3StatMergesThreshold">0</div><div class="lbl">Rows merged (threshold)</div></div>
+          <div class="stat"><div class="val" id="v3StatMergesInclusive">0</div><div class="lbl">Rows merged (overlapping)</div></div>
+        </div>
+
+        <h3 style="margin: 20px 0 8px; font-size:15px; font-weight:600;">Consolidated asset groups</h3>
+        <p class="subtitle" style="margin-bottom:10px;">Only the rows whose asset group name changed. Each row shows the original group, the property count, the consolidated name, and why it was merged.</p>
+        <div class="table-wrap">
+          <table id="v3MergeTable"></table>
+        </div>
+
+        <div class="toolbar" style="margin-top: 20px;">
+          <div class="left"><span id="v3MergeSummary" style="color: var(--muted); font-size: 13px;"></span></div>
+          <div class="right">
+            <button class="btn btn-primary" id="v3DownloadXlsx">Download consolidated .xlsx</button>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -534,8 +718,10 @@ const v1 = {
   sheetName: null,
   headers: [],
   rows: [],
+  inOutCol: null,
+  filteredRows: [],
   selectedCols: [],
-  outputRows: [],   // rows + asset group v1
+  outputRows: [],   // filtered rows + asset group v1
   fileName: "",
 };
 
@@ -556,6 +742,27 @@ const v2 = {
   unchangedGroups: [],      // v1 groups that never participate in any merge
 };
 
+const v3 = {
+  workbook: null,
+  sheetName: '',
+  headers: [],
+  rows: [],
+  fileName: '',
+  assetGroupCol: null,
+  countCol: null,
+  parsedPositionCount: 0,   // number of '|'-split pieces in the first asset-group name
+  ageBandPos: null,         // 0-based index into the split, or null
+  tenurePos: null,          // 0-based index into the split
+  tenurePairRows: [],       // array of { t1, t2 } for the tenure-pair UI
+  threshold: 5,
+  allowPrePost2000: false,
+  includeInclusive: false,
+  processor: null,          // V3DataProcessor instance
+  stats: null,
+  uniqueTenures: [],
+  validRowCount: 0,
+};
+
 /* ====================================================== */
 /* section + step navigation                               */
 /* ====================================================== */
@@ -565,6 +772,7 @@ function setSection(name) {
   });
   document.getElementById('sectionV1').classList.toggle('hidden', name !== 'v1');
   document.getElementById('sectionV2').classList.toggle('hidden', name !== 'v2');
+  document.getElementById('sectionV3').classList.toggle('hidden', name !== 'v3');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 document.querySelectorAll('.section-tab').forEach(b => {
@@ -586,8 +794,9 @@ function setStep(stepsEl, panels, n) {
 const v1StepsEl = document.getElementById('v1Steps');
 const v1Panels = [
   ['v1PanelUpload', 1],
-  ['v1PanelSelect', 2],
-  ['v1PanelExport', 3],
+  ['v1PanelFilter', 2],
+  ['v1PanelSelect', 3],
+  ['v1PanelExport', 4],
 ];
 const setV1Step = (n) => setStep(v1StepsEl, v1Panels, n);
 
@@ -598,6 +807,14 @@ const v2Panels = [
   ['v2PanelMerge', 3],
 ];
 const setV2Step = (n) => setStep(v2StepsEl, v2Panels, n);
+
+const v3StepsEl = document.getElementById('v3Steps');
+const v3Panels = [
+  ['v3PanelUpload', 1],
+  ['v3PanelColumns', 2],
+  ['v3PanelConsolidate', 3],
+];
+const setV3Step = (n) => setStep(v3StepsEl, v3Panels, n);
 
 /* ====================================================== */
 /* shared file reading                                     */
@@ -659,10 +876,87 @@ async function v1HandleFile(file) {
     document.getElementById('v1DropZone').classList.add('hidden');
     document.getElementById('v1FileInfo').classList.remove('hidden');
 
-    v1BuildColumnGrid();
+    v1PopulateFilter();
     setV1Step(2);
   } catch (err) {
     alert('Could not read file: ' + err.message);
+  }
+}
+
+function v1PopulateFilter() {
+  const sel = document.getElementById('v1InOutSelect');
+  sel.innerHTML = '';
+
+  const noneOpt = document.createElement('option');
+  noneOpt.value = '';
+  noneOpt.textContent = '(none — keep all rows)';
+  sel.appendChild(noneOpt);
+
+  v1.headers.forEach(h => {
+    const o = document.createElement('option');
+    o.value = h; o.textContent = h;
+    sel.appendChild(o);
+  });
+
+  const guess = v1.headers.find(h => /\bin\s*[\/_-]\s*out\b/i.test(h))
+             || v1.headers.find(h => /^\s*in\s*\/\s*out\s*$/i.test(h))
+             || v1.headers.find(h => /^\s*in[\s_-]?out\s*$/i.test(h));
+  sel.value = guess || '';
+  v1.inOutCol = guess || null;
+
+  sel.onchange = () => {
+    v1.inOutCol = sel.value || null;
+    v1UpdateFilterStats();
+  };
+
+  v1UpdateFilterStats();
+}
+
+function v1UpdateFilterStats() {
+  const total = v1.rows.length;
+  let inCount = 0, outCount = 0, otherCount = 0;
+
+  if (v1.inOutCol) {
+    for (const r of v1.rows) {
+      const v = String(r[v1.inOutCol] ?? '').trim().toLowerCase();
+      if (v === 'in') inCount++;
+      else if (v === 'out') outCount++;
+      else otherCount++;
+    }
+  } else {
+    inCount = total;
+  }
+
+  document.getElementById('v1FilterTotal').textContent = total.toLocaleString();
+  document.getElementById('v1FilterIn').textContent = inCount.toLocaleString();
+  document.getElementById('v1FilterOut').textContent = outCount.toLocaleString();
+  document.getElementById('v1FilterOther').textContent = otherCount.toLocaleString();
+
+  const hint = document.getElementById('v1InOutSample');
+  if (v1.inOutCol) {
+    const samples = [];
+    for (const r of v1.rows) {
+      const v = String(r[v1.inOutCol] ?? '').trim();
+      if (v && !samples.includes(v)) samples.push(v);
+      if (samples.length >= 4) break;
+    }
+    hint.textContent = samples.length
+      ? `Sample values: ${samples.join(', ')}`
+      : '(this column appears to be empty)';
+  } else {
+    hint.textContent = 'No filter applied — all rows will be used.';
+  }
+
+  document.getElementById('v1FilterNext').disabled = inCount === 0;
+}
+
+function v1ApplyFilter() {
+  if (v1.inOutCol) {
+    v1.filteredRows = v1.rows.filter(r =>
+      String(r[v1.inOutCol] ?? '').trim().toLowerCase() === 'in'
+    );
+  } else {
+    v1.filteredRows = v1.rows.slice();
   }
 }
 
@@ -673,7 +967,7 @@ function v1BuildColumnGrid() {
 
   v1.headers.forEach(col => {
     let sample = '';
-    for (const r of v1.rows) {
+    for (const r of v1.filteredRows) {
       if (r[col] !== '' && r[col] != null) { sample = String(r[col]); break; }
     }
     const card = document.createElement('div');
@@ -717,7 +1011,7 @@ function v1UpdateSelectionUI() {
     `${v1.selectedCols.length} selected`;
   document.getElementById('v1GenerateBtn').disabled = v1.selectedCols.length === 0;
 
-  const first = v1.rows[0];
+  const first = v1.filteredRows[0];
   const preview = v1.selectedCols.length && first
     ? v1.selectedCols.map(c => fmtVal(first[c])).join(' | ')
     : '— select attributes above —';
@@ -732,13 +1026,19 @@ document.getElementById('v1ClearAll').addEventListener('click', () => {
   v1.selectedCols = [];
   v1UpdateSelectionUI();
 });
-document.getElementById('v1BackToUpload').addEventListener('click', () => setV1Step(1));
+document.getElementById('v1BackToUpload').addEventListener('click', () => setV1Step(2));
 document.getElementById('v1GenerateBtn').addEventListener('click', v1GenerateGroups);
+document.getElementById('v1FilterBack').addEventListener('click', () => setV1Step(1));
+document.getElementById('v1FilterNext').addEventListener('click', () => {
+  v1ApplyFilter();
+  v1BuildColumnGrid();
+  setV1Step(3);
+});
 
 function v1GenerateGroups() {
   const colName = 'asset group v1';
   const seen = new Map();
-  v1.outputRows = v1.rows.map(r => {
+  v1.outputRows = v1.filteredRows.map(r => {
     const name = v1.selectedCols.map(c => fmtVal(r[c])).join(' | ');
     seen.set(name, (seen.get(name) || 0) + 1);
     return { ...r, [colName]: name };
@@ -751,7 +1051,7 @@ function v1GenerateGroups() {
     (v1.outputRows.length / seen.size).toFixed(1);
 
   v1RenderPreviewTable();
-  setV1Step(3);
+  setV1Step(4);
 }
 
 function v1RenderPreviewTable() {
@@ -786,7 +1086,7 @@ function v1RenderPreviewTable() {
   }
 }
 
-document.getElementById('v1BackToSelect').addEventListener('click', () => setV1Step(2));
+document.getElementById('v1BackToSelect').addEventListener('click', () => setV1Step(3));
 document.getElementById('v1DownloadXlsx').addEventListener('click', () => v1Download('xlsx'));
 document.getElementById('v1DownloadCsv').addEventListener('click', () => v1Download('csv'));
 document.getElementById('v1ContinueToV2').addEventListener('click', v1HandoffToV2);
@@ -1178,6 +1478,46 @@ function downloadV2AllCsv() {
 document.getElementById('v2ShowAllMappings').addEventListener('change', renderV2MergeTable);
 document.getElementById('v2DownloadAllXlsx').addEventListener('click', downloadV2AllXlsx);
 document.getElementById('v2DownloadAllCsv').addEventListener('click', downloadV2AllCsv);
+document.getElementById('v2ContinueToV3').addEventListener('click', v2HandoffToV3);
+
+function v2HandoffToV3() {
+  if (!v2.mergedRows || !v2.mergedRows.length) {
+    alert('No merged rows to hand off. Please complete V2 step 3 first.');
+    return;
+  }
+  // V2 is property-level; V3 expects aggregated "asset group + count" rows.
+  const v2Col = 'asset group v2';
+  const counts = new Map();
+  for (const r of v2.mergedRows) {
+    const name = fmtVal(r[v2Col]);
+    if (!name) continue;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  const assetCol = 'asset group v2';
+  const countCol = 'count of properties';
+  const rows = [...counts.entries()].map(([name, n]) => ({ [assetCol]: name, [countCol]: n }));
+
+  v3.workbook = null;
+  v3.sheetName = 'from V2';
+  v3.fileName = v2.fileName || 'asset-groups';
+  v3.headers = [assetCol, countCol];
+  v3.rows = rows;
+  v3.assetGroupCol = assetCol;
+  v3.countCol = countCol;
+  v3.ageBandPos = null;
+  v3.tenurePos = null;
+  v3.tenurePairRows = [];
+
+  document.getElementById('v3DropZone').classList.add('hidden');
+  document.getElementById('v3FileInfo').classList.remove('hidden');
+  document.getElementById('v3FileName').textContent = (v3.fileName || 'asset-groups') + ' (from section 2)';
+  document.getElementById('v3FileSummary').textContent =
+    `${rows.length.toLocaleString()} asset groups · aggregated from V2 merged rows`;
+
+  setSection('v3');
+  v3PopulateColumnSelectors();
+  setV3Step(2);
+}
 
 /* a block reference is "valid" for merging only if it is non-empty
    and not literally 0 (handles "0", "0.0", " 0 ", etc.) */
@@ -1371,6 +1711,834 @@ function renderV2MergeTable() {
 
   document.getElementById('v2MergeSummary').textContent =
     `${list.length.toLocaleString()} ${showAll ? 'row-group' : 'merged cluster'}${list.length === 1 ? '' : 's'} shown`;
+}
+
+/* ====================================================== */
+/* SECTION V3 — CONSOLIDATE SMALL ASSET GROUPS             */
+/* JS port of utils/merger.py + utils/data_processor.py    */
+/* ====================================================== */
+
+/* ---------- merger (ported from AssetGroupMerger) ---------- */
+class AssetGroupMerger {
+  constructor() {
+    this.tenurePairs = {};
+    this.allowPrePost2000 = false;
+  }
+  setTenurePairs(pairs) { this.tenurePairs = pairs || {}; }
+  setAllowPrePost2000(flag) { this.allowPrePost2000 = !!flag; }
+
+  static parseAgeBand(band) {
+    if (band == null) return null;
+    const s = String(band).trim();
+    if (!s || s.toLowerCase() === 'unknown') return null;
+    const norm = s.replace(/\u2013|\u2014/g, '-');
+    const lower = norm.toLowerCase();
+    let m;
+    if (lower.startsWith('pre')) {
+      m = norm.match(/(\d{4})/);
+      return m ? [0, parseInt(m[1], 10) - 1] : null;
+    }
+    if (lower.startsWith('post')) {
+      m = norm.match(/(\d{4})/);
+      return m ? [parseInt(m[1], 10) + 1, 9999] : null;
+    }
+    m = norm.match(/^\s*(\d{4})\s*-\s*(\d{4})\s*$/);
+    if (m) {
+      let a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+      if (a > b) [a, b] = [b, a];
+      return [a, b];
+    }
+    m = norm.match(/^\s*(\d{4})\s*$/);
+    if (m) { const y = parseInt(m[1], 10); return [y, y]; }
+    return null;
+  }
+
+  _ageBandsCross2000(p1, p2) {
+    if (!p1 || !p2) return false;
+    const [, e1] = p1, [s2, e2] = p2, [s1] = p1;
+    return (e1 <= 2000 && s2 >= 2000) || (e2 <= 2000 && s1 >= 2000);
+  }
+
+  _splitCompoundTenure(t) {
+    return new Set(String(t).split('&').map(x => x.trim()).filter(x => x.length));
+  }
+  _isTenureInclusive(t1, t2) {
+    const c1 = this._splitCompoundTenure(t1);
+    const c2 = this._splitCompoundTenure(t2);
+    for (const x of c2) if (!c1.has(x)) return false;
+    return true;
+  }
+  _getAgeBandOrder(b) {
+    const p = AssetGroupMerger.parseAgeBand(b);
+    return p ? p[0] : 1e9;
+  }
+  _orderAgeBands(a, b) {
+    if (a === 'Unknown' && b === 'Unknown') return [a, b];
+    if (a === 'Unknown') return [b, a];
+    if (b === 'Unknown') return [a, b];
+    return this._getAgeBandOrder(a) <= this._getAgeBandOrder(b) ? [a, b] : [b, a];
+  }
+
+  canMergeTenure(t1, t2) {
+    if (t1 === t2) return true;
+    if (this._isTenureInclusive(t1, t2) || this._isTenureInclusive(t2, t1)) return true;
+    const pairs = this.tenurePairs[t1];
+    return !!(pairs && pairs.indexOf(t2) >= 0);
+  }
+  getTenureMergeScore(t1, t2) {
+    if (this._isTenureInclusive(t1, t2) || this._isTenureInclusive(t2, t1)) return 3;
+    if (t1 === t2) return 2;
+    const pairs = this.tenurePairs[t1];
+    if (pairs && pairs.indexOf(t2) >= 0) return 1;
+    return 0;
+  }
+  getMergedTenure(t1, t2) {
+    if (this._isTenureInclusive(t1, t2)) return t1;
+    if (this._isTenureInclusive(t2, t1)) return t2;
+    const pairs = this.tenurePairs[t1];
+    if (pairs && pairs.indexOf(t2) >= 0) return `${t1} & ${t2}`;
+    return t1;
+  }
+
+  generateMergedName(g1, g2) {
+    const parts1 = g1.parts;
+    const parts2 = g2.parts;
+    const ageBandPos = g1.ageBandPos;
+    const tenurePos = g1.tenurePos;
+    const merged = [];
+
+    if (ageBandPos != null && ageBandPos >= 0) {
+      for (let i = 0; i < ageBandPos; i++) merged.push(parts1[i]);
+      if (g1.ageBand === g2.ageBand) {
+        merged.push(g1.ageBand);
+      } else {
+        const [earlier, later] = this._orderAgeBands(g1.ageBand, g2.ageBand);
+        merged.push(`${earlier} & ${later}`);
+      }
+      const stop = tenurePos >= 0 ? tenurePos : parts1.length;
+      for (let i = ageBandPos + 1; i < stop; i++) merged.push(parts1[i]);
+    } else {
+      for (let i = 0; i < parts1.length; i++) {
+        if (i === tenurePos) continue;
+        merged.push(parts1[i]);
+      }
+    }
+    merged.push(this.getMergedTenure(g1.tenure, g2.tenure));
+    return merged.join(' | ');
+  }
+
+  areAgeBandsAdjacent(a1, a2) {
+    if (a1 === 'Unknown' && a2 === 'Unknown') return true;
+    if (a1 === 'Unknown' || a2 === 'Unknown') return true;
+    const p1 = AssetGroupMerger.parseAgeBand(a1);
+    const p2 = AssetGroupMerger.parseAgeBand(a2);
+    if (!p1 || !p2) return false;
+    if (p1[0] === p2[0] && p1[1] === p2[1]) return true;
+    const [s1, e1] = p1, [s2, e2] = p2;
+    const touches = (e1 + 1 === s2) || (e2 + 1 === s1) || (e1 === s2) || (e2 === s1);
+    if (!touches) return false;
+    if (this._ageBandsCross2000(p1, p2)) return this.allowPrePost2000;
+    return true;
+  }
+
+  getAgeBandPreferenceScore(a1, a2) {
+    if (a1 === 'Unknown' && a2 === 'Unknown') return 2;
+    if (a1 === 'Unknown' || a2 === 'Unknown') return 1;
+    if (a1 === a2) return 2;
+    const p1 = AssetGroupMerger.parseAgeBand(a1);
+    const p2 = AssetGroupMerger.parseAgeBand(a2);
+    if (!p1 || !p2) return 0;
+    if (p1[0] === p2[0] && p1[1] === p2[1]) return 2;
+    const [s1, e1] = p1, [s2, e2] = p2;
+    const touches = (e1 + 1 === s2) || (e2 + 1 === s1) || (e1 === s2) || (e2 === s1);
+    if (!touches) return 0;
+    if (this._ageBandsCross2000(p1, p2)) return this.allowPrePost2000 ? 0.5 : 0;
+    return 1;
+  }
+
+  canGroupsMerge(g1, g2) {
+    const parts1 = g1.parts;
+    const parts2 = g2.parts;
+    if (parts1.length !== parts2.length) return false;
+    for (let i = 0; i < parts1.length; i++) {
+      if (i === g1.ageBandPos || i === g1.tenurePos) continue;
+      if (parts1[i] !== parts2[i]) return false;
+    }
+    if (!this.canMergeTenure(g1.tenure, g2.tenure)) return false;
+    if (!this.areAgeBandsAdjacent(g1.ageBand, g2.ageBand)) return false;
+    return true;
+  }
+
+  rankMergeCandidates(smallGroup, candidates) {
+    const ranked = candidates.map(c => {
+      let score = 0;
+      score += this.getTenureMergeScore(smallGroup.tenure, c.group.tenure) * 1000;
+      if (this.areAgeBandsAdjacent(smallGroup.ageBand, c.group.ageBand)) {
+        score += 100;
+        score += this.getAgeBandPreferenceScore(smallGroup.ageBand, c.group.ageBand) * 10;
+      }
+      score -= c.group.properties * 0.1;
+      return { candidate: c, score };
+    });
+    ranked.sort((a, b) => b.score - a.score);
+    return ranked;
+  }
+
+  findMergeCandidates(allGroups, smallGroups) {
+    const possibilities = new Map();
+    for (const small of smallGroups) {
+      const cands = [];
+      for (const other of allGroups) {
+        if (other.idx === small.idx) continue;
+        if (this.canGroupsMerge(small, other)) {
+          cands.push({
+            group: other,
+            smallGroup: small,
+            totalProperties: small.properties + other.properties,
+            mergedName: this.generateMergedName(small, other),
+          });
+        }
+      }
+      if (cands.length) {
+        const ranked = this.rankMergeCandidates(small, cands);
+        possibilities.set(small.idx, ranked.map(r => r.candidate));
+      }
+    }
+    return this.resolveConflicts(possibilities);
+  }
+
+  resolveConflicts(possibilities) {
+    const resolved = new Map();
+    const claimed = new Set();
+    const items = [...possibilities.entries()].sort((a, b) => {
+      const ap = a[1][0] ? a[1][0].smallGroup.properties : Infinity;
+      const bp = b[1][0] ? b[1][0].smallGroup.properties : Infinity;
+      return ap - bp;
+    });
+    for (const [idx, cands] of items) {
+      if (!cands || !cands.length) continue;
+      if (claimed.has(idx)) continue;
+      for (const cand of cands) {
+        const cIdx = cand.group.idx;
+        if (!claimed.has(cIdx)) {
+          resolved.set(idx, [cand]);
+          claimed.add(idx);
+          claimed.add(cIdx);
+          break;
+        }
+      }
+    }
+    return resolved;
+  }
+}
+
+/* ---------- data processor (ported from DataProcessor) ---------- */
+class V3DataProcessor {
+  constructor(rows, assetGroupCol, countCol, ageBandPos, tenurePos) {
+    this.assetGroupCol = assetGroupCol;
+    this.countCol = countCol;
+    this.ageBandPos = ageBandPos;
+    this.tenurePos = tenurePos;
+    this.merger = new AssetGroupMerger();
+    this.groups = rows.map((r, i) => {
+      const originalAssetGroup = String(r[assetGroupCol] ?? '').trim();
+      const parts = originalAssetGroup.split('|').map(p => p.trim());
+      const ageBand = (ageBandPos != null && ageBandPos >= 0)
+        ? ((parts[ageBandPos] ?? '').trim() || 'Unknown')
+        : 'Unknown';
+      const tenure = (parts[tenurePos] ?? '').trim();
+      const propertiesRaw = r[countCol];
+      const properties = typeof propertiesRaw === 'number'
+        ? propertiesRaw
+        : (Number(String(propertiesRaw).replace(/,/g, '')) || 0);
+      const canonicalOriginal = parts.join(' | ');
+      return {
+        idx: i,
+        originalAssetGroup: canonicalOriginal,
+        rawAssetGroup: originalAssetGroup,
+        parts,
+        ageBand,
+        tenure,
+        ageBandPos,
+        tenurePos,
+        properties,
+        mergedAssetGroup: canonicalOriginal,
+        mergeSource: null,
+        rowRef: r,
+      };
+    });
+  }
+
+  setTenurePairs(pairs) { this.merger.setTenurePairs(pairs); }
+  setAllowPrePost2000(flag) { this.merger.setAllowPrePost2000(flag); }
+
+  identifySmallGroups(threshold) {
+    return this.groups.filter(g => g.properties < threshold);
+  }
+
+  _verifyMergedName(name1, name2, mergedName) {
+    const parts1 = name1.split(' | ');
+    const parts2 = name2.split(' | ');
+    const mergedParts = mergedName.split(' | ');
+    if (parts1.length !== parts2.length) return mergedName;
+    if (mergedParts.length >= parts1.length) return mergedName;
+    const ageBandIdx = 2;
+    const tenureIdx = parts1.length - 1;
+    const corrected = [];
+    for (let i = 0; i < ageBandIdx; i++) corrected.push(parts1[i]);
+    let ageFound = false;
+    for (const p of mergedParts) {
+      if (p.indexOf('&') !== -1 && (p.indexOf(parts1[ageBandIdx]) !== -1 || p.indexOf(parts2[ageBandIdx]) !== -1)) {
+        corrected.push(p);
+        ageFound = true;
+        break;
+      }
+    }
+    if (!ageFound) corrected.push(parts1[ageBandIdx]);
+    for (let i = ageBandIdx + 1; i < tenureIdx; i++) {
+      if (i < parts1.length) corrected.push(parts1[i]);
+    }
+    corrected.push(mergedParts.length ? mergedParts[mergedParts.length - 1] : parts1[tenureIdx]);
+    return corrected.join(' | ');
+  }
+
+  applyMerges(threshold, includeInclusive) {
+    for (const g of this.groups) {
+      g.mergedAssetGroup = g.originalAssetGroup;
+      g.mergeSource = null;
+    }
+    const stats = {
+      smallGroupsMerged: 0,
+      inclusiveGroupsMerged: 0,
+      totalGroupsMerged: 0,
+      verifiedMerges: 0,
+    };
+    const smallGroups = this.identifySmallGroups(threshold);
+    const mergeCandidates = this.merger.findMergeCandidates(this.groups, smallGroups);
+    const sourceLabel = `Small Group (< ${threshold})`;
+
+    for (const [smallIdx, cands] of mergeCandidates) {
+      if (!cands || !cands.length) continue;
+      const best = cands[0];
+      const targetIdx = best.group.idx;
+      const verified = this._verifyMergedName(
+        this.groups[smallIdx].originalAssetGroup,
+        this.groups[targetIdx].originalAssetGroup,
+        best.mergedName
+      );
+      if (verified !== best.mergedName) stats.verifiedMerges++;
+      this.groups[smallIdx].mergedAssetGroup = verified;
+      this.groups[targetIdx].mergedAssetGroup = verified;
+      this.groups[smallIdx].mergeSource = sourceLabel;
+      this.groups[targetIdx].mergeSource = sourceLabel;
+      stats.smallGroupsMerged += 2;
+    }
+
+    if (includeInclusive) {
+      const inclusiveMerges = this.findInclusiveGroups();
+      for (const [mergeIdx, info] of inclusiveMerges) {
+        const mainIdx = info.mainGroupIdx;
+        if (this.groups[mergeIdx].mergeSource === null &&
+            this.groups[mainIdx].mergeSource === null) {
+          const verified = this._verifyMergedName(
+            this.groups[mergeIdx].originalAssetGroup,
+            this.groups[mainIdx].originalAssetGroup,
+            info.mergedName
+          );
+          if (verified !== info.mergedName) stats.verifiedMerges++;
+          this.groups[mergeIdx].mergedAssetGroup = verified;
+          this.groups[mainIdx].mergedAssetGroup = verified;
+          this.groups[mergeIdx].mergeSource = 'Inclusive Tenure';
+          this.groups[mainIdx].mergeSource = 'Inclusive Tenure';
+          stats.inclusiveGroupsMerged += 2;
+        }
+      }
+    }
+    stats.totalGroupsMerged = stats.smallGroupsMerged + stats.inclusiveGroupsMerged;
+    return stats;
+  }
+
+  findInclusiveGroups() {
+    const inclusive = new Map();
+    const groups = this.groups;
+    for (let i = 0; i < groups.length; i++) {
+      const g1 = groups[i];
+      for (let j = 0; j < groups.length; j++) {
+        if (i === j) continue;
+        const g2 = groups[j];
+        const parts1 = g1.parts;
+        const parts2 = g2.parts;
+        if (parts1.length !== parts2.length) continue;
+        let ok = true;
+        for (let k = 0; k < parts1.length; k++) {
+          if (k === g1.tenurePos) continue;
+          if (parts1[k] !== parts2[k]) { ok = false; break; }
+        }
+        if (!ok) continue;
+        if (!this.merger._isTenureInclusive(g1.tenure, g2.tenure)) continue;
+        const mergedName = this.merger.generateMergedName(g1, g2);
+        let mainIdx, mergeIdx;
+        if (g1.tenure.indexOf('&') !== -1) { mainIdx = i; mergeIdx = j; }
+        else { mainIdx = j; mergeIdx = i; }
+        if (!inclusive.has(mergeIdx)) {
+          inclusive.set(mergeIdx, { mainGroupIdx: mainIdx, mergedName });
+        }
+      }
+    }
+    return inclusive;
+  }
+}
+
+/* ---------- V3 UI: upload ---------- */
+const v3DropZone = document.getElementById('v3DropZone');
+const v3FileInput = document.getElementById('v3FileInput');
+v3DropZone.addEventListener('click', () => v3FileInput.click());
+v3DropZone.addEventListener('dragover', e => { e.preventDefault(); v3DropZone.classList.add('dragging'); });
+v3DropZone.addEventListener('dragleave', () => v3DropZone.classList.remove('dragging'));
+v3DropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  v3DropZone.classList.remove('dragging');
+  if (e.dataTransfer.files.length) v3HandleFile(e.dataTransfer.files[0]);
+});
+v3FileInput.addEventListener('change', e => {
+  if (e.target.files.length) v3HandleFile(e.target.files[0]);
+});
+document.getElementById('v3ChangeFile').addEventListener('click', () => {
+  v3.workbook = null;
+  document.getElementById('v3FileInfo').classList.add('hidden');
+  document.getElementById('v3DropZone').classList.remove('hidden');
+  v3FileInput.value = '';
+});
+
+async function v3HandleFile(file) {
+  try {
+    v3.fileName = file.name;
+    const { workbook, sheetName, headers, rows } = await readWorkbook(file);
+    v3.workbook = workbook;
+    v3.sheetName = sheetName;
+    v3.headers = headers;
+    v3.rows = rows;
+
+    document.getElementById('v3FileName').textContent = file.name;
+    document.getElementById('v3FileSummary').textContent =
+      `${rows.length.toLocaleString()} rows · ${headers.length} columns · sheet "${sheetName}"`;
+    document.getElementById('v3DropZone').classList.add('hidden');
+    document.getElementById('v3FileInfo').classList.remove('hidden');
+
+    v3PopulateColumnSelectors();
+    setV3Step(2);
+  } catch (err) {
+    alert('Could not read file: ' + err.message);
+  }
+}
+
+/* ---------- V3 UI: column selection ---------- */
+function v3PopulateColumnSelectors() {
+  const agSel = document.getElementById('v3AssetGroupSelect');
+  const ctSel = document.getElementById('v3CountSelect');
+  agSel.innerHTML = '';
+  ctSel.innerHTML = '';
+
+  const placeholder = (text) => {
+    const o = document.createElement('option');
+    o.value = ''; o.textContent = text;
+    return o;
+  };
+  agSel.appendChild(placeholder('— choose a column —'));
+  ctSel.appendChild(placeholder('— choose a column —'));
+
+  v3.headers.forEach(h => {
+    const o1 = document.createElement('option');
+    o1.value = h; o1.textContent = h;
+    agSel.appendChild(o1);
+    const o2 = document.createElement('option');
+    o2.value = h; o2.textContent = h;
+    ctSel.appendChild(o2);
+  });
+
+  let agGuess = v3.headers.find(h => /asset\s*group/i.test(h));
+  if (!agGuess) {
+    agGuess = v3.headers.find(h => {
+      for (const r of v3.rows) {
+        const v = r[h];
+        if (v != null && String(v).indexOf('|') >= 0) return true;
+      }
+      return false;
+    });
+  }
+  let ctGuess = v3.headers.find(h => /count|propert/i.test(h) && h !== agGuess);
+  if (!ctGuess) {
+    ctGuess = v3.headers.find(h => {
+      if (h === agGuess) return false;
+      let numeric = 0, total = 0;
+      for (const r of v3.rows) {
+        if (r[h] === '' || r[h] == null) continue;
+        total++;
+        const n = Number(String(r[h]).replace(/,/g, ''));
+        if (!isNaN(n)) numeric++;
+        if (total > 20) break;
+      }
+      return total > 0 && numeric / total > 0.8;
+    });
+  }
+
+  agSel.value = agGuess || '';
+  ctSel.value = ctGuess || '';
+  v3.assetGroupCol = agGuess || null;
+  v3.countCol = ctGuess || null;
+  v3UpdateColumnHint('asset');
+  v3UpdateColumnHint('count');
+  v3UpdateParsedPreview();
+
+  agSel.onchange = () => {
+    v3.assetGroupCol = agSel.value || null;
+    v3UpdateColumnHint('asset');
+    v3UpdateParsedPreview();
+  };
+  ctSel.onchange = () => {
+    v3.countCol = ctSel.value || null;
+    v3UpdateColumnHint('count');
+    v3UpdateContinueEnabled();
+  };
+}
+
+function v3UpdateColumnHint(which) {
+  const col = which === 'asset' ? v3.assetGroupCol : v3.countCol;
+  const target = document.getElementById(which === 'asset' ? 'v3AssetGroupSample' : 'v3CountSample');
+  if (!col) { target.textContent = ''; return; }
+  const samples = [];
+  for (const r of v3.rows) {
+    const v = fmtVal(r[col]);
+    if (v && !samples.includes(v)) samples.push(v);
+    if (samples.length >= 3) break;
+  }
+  target.textContent = samples.length ? `Sample values: ${samples.join(' · ')}` : '(this column appears to be empty)';
+}
+
+function v3UpdateParsedPreview() {
+  const previewBox = document.getElementById('v3ParsedPreview');
+  const parsedRowEl = document.getElementById('v3ParsedRow');
+  const ageSel = document.getElementById('v3AgeBandSelect');
+  const tenSel = document.getElementById('v3TenureSelect');
+
+  if (!v3.assetGroupCol) {
+    previewBox.classList.add('hidden');
+    v3UpdateContinueEnabled();
+    return;
+  }
+  let firstParts = null;
+  for (const r of v3.rows) {
+    const s = String(r[v3.assetGroupCol] ?? '').trim();
+    if (s) { firstParts = s.split('|').map(p => p.trim()); break; }
+  }
+  if (!firstParts || firstParts.length === 0) {
+    previewBox.classList.add('hidden');
+    v3UpdateContinueEnabled();
+    return;
+  }
+
+  v3.parsedPositionCount = firstParts.length;
+  parsedRowEl.innerHTML = firstParts.map((p, i) =>
+    `<span style="display:inline-block; padding:3px 8px; margin:2px 4px 2px 0; border:1px solid var(--border); border-radius:4px; background:white; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:12px;">` +
+    `<span style="color:var(--muted); font-size:10px;">pos ${i + 1}</span> ${escapeHtml(p) || '(empty)'}` +
+    `</span>`
+  ).join('');
+
+  ageSel.innerHTML = '';
+  tenSel.innerHTML = '';
+  const noneOpt = document.createElement('option');
+  noneOpt.value = ''; noneOpt.textContent = 'None (no age band column)';
+  ageSel.appendChild(noneOpt);
+  const placeTen = document.createElement('option');
+  placeTen.value = ''; placeTen.textContent = '— choose a piece —';
+  tenSel.appendChild(placeTen);
+  firstParts.forEach((p, i) => {
+    const o1 = document.createElement('option');
+    o1.value = String(i); o1.textContent = `Piece ${i + 1} · ${p.slice(0, 30) || '(empty)'}`;
+    ageSel.appendChild(o1);
+    const o2 = document.createElement('option');
+    o2.value = String(i); o2.textContent = `Piece ${i + 1} · ${p.slice(0, 30) || '(empty)'}`;
+    tenSel.appendChild(o2);
+  });
+
+  const defaultTenure = firstParts.length - 1;
+  const defaultAgeBand = firstParts.length >= 3 ? firstParts.length - 3 : null;
+  if (v3.tenurePos == null || v3.tenurePos >= firstParts.length) {
+    v3.tenurePos = defaultTenure;
+  }
+  if (v3.ageBandPos == null || v3.ageBandPos >= firstParts.length) {
+    v3.ageBandPos = defaultAgeBand;
+  }
+  ageSel.value = v3.ageBandPos == null ? '' : String(v3.ageBandPos);
+  tenSel.value = v3.tenurePos == null ? '' : String(v3.tenurePos);
+
+  ageSel.onchange = () => {
+    v3.ageBandPos = ageSel.value === '' ? null : parseInt(ageSel.value, 10);
+    v3UpdateContinueEnabled();
+    v3UpdateRowFilterWarn();
+  };
+  tenSel.onchange = () => {
+    v3.tenurePos = tenSel.value === '' ? null : parseInt(tenSel.value, 10);
+    v3UpdateContinueEnabled();
+    v3UpdateRowFilterWarn();
+  };
+
+  previewBox.classList.remove('hidden');
+  v3UpdateRowFilterWarn();
+  v3UpdateContinueEnabled();
+}
+
+function v3ValidRows() {
+  if (!v3.assetGroupCol || v3.tenurePos == null) return [];
+  const out = [];
+  for (const r of v3.rows) {
+    const s = String(r[v3.assetGroupCol] ?? '').trim();
+    if (!s) continue;
+    const parts = s.split('|').map(p => p.trim());
+    const tenure = (parts[v3.tenurePos] ?? '').trim();
+    if (!tenure) continue;
+    if (v3.ageBandPos != null) {
+      const ab = (parts[v3.ageBandPos] ?? '').trim();
+      if (!ab) continue;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+function v3UpdateRowFilterWarn() {
+  const warn = document.getElementById('v3RowFilterWarn');
+  if (!v3.assetGroupCol || v3.tenurePos == null) {
+    warn.classList.add('hidden');
+    return;
+  }
+  const valid = v3ValidRows();
+  v3.validRowCount = valid.length;
+  const skipped = v3.rows.length - valid.length;
+  if (skipped > 0) {
+    warn.textContent = `Heads up: ${skipped.toLocaleString()} row(s) are missing the asset group name, tenure, or age band and will be skipped. ${valid.length.toLocaleString()} row(s) will be consolidated.`;
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+}
+
+function v3UpdateContinueEnabled() {
+  const ok = !!(v3.assetGroupCol && v3.countCol && v3.tenurePos != null && v3ValidRows().length > 0);
+  document.getElementById('v3GoToConsolidate').disabled = !ok;
+}
+
+document.getElementById('v3BackToUpload').addEventListener('click', () => setV3Step(1));
+document.getElementById('v3GoToConsolidate').addEventListener('click', () => {
+  v3BuildTenurePairUI();
+  setV3Step(3);
+});
+
+/* ---------- V3 UI: configure & consolidate ---------- */
+function v3CollectUniqueTenures() {
+  const set = new Set();
+  for (const r of v3ValidRows()) {
+    const s = String(r[v3.assetGroupCol] ?? '').trim();
+    const parts = s.split('|').map(p => p.trim());
+    const t = (parts[v3.tenurePos] ?? '').trim();
+    if (t) set.add(t);
+  }
+  v3.uniqueTenures = [...set].sort(naturalCompare);
+}
+
+function v3BuildTenurePairUI() {
+  v3CollectUniqueTenures();
+  if (!v3.tenurePairRows.length) {
+    v3.tenurePairRows = [{ t1: v3.uniqueTenures[0] || '', t2: v3.uniqueTenures[1] || '' }];
+  }
+  v3RenderTenurePairs();
+}
+
+function v3RenderTenurePairs() {
+  const host = document.getElementById('v3TenurePairs');
+  host.innerHTML = '';
+  v3.tenurePairRows.forEach((row, i) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:grid; grid-template-columns: 1fr 1fr auto; gap:8px; margin-bottom:8px; align-items:center;';
+    const sel1 = document.createElement('select');
+    sel1.style.cssText = 'padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; background:white;';
+    const sel2 = document.createElement('select');
+    sel2.style.cssText = sel1.style.cssText;
+    v3.uniqueTenures.forEach(t => {
+      const o1 = document.createElement('option'); o1.value = t; o1.textContent = t; sel1.appendChild(o1);
+      const o2 = document.createElement('option'); o2.value = t; o2.textContent = t; sel2.appendChild(o2);
+    });
+    sel1.value = row.t1; sel2.value = row.t2;
+    sel1.onchange = () => { row.t1 = sel1.value; };
+    sel2.onchange = () => { row.t2 = sel2.value; };
+    const rm = document.createElement('button');
+    rm.className = 'btn-ghost btn';
+    rm.textContent = 'Remove';
+    rm.onclick = () => {
+      v3.tenurePairRows.splice(i, 1);
+      v3RenderTenurePairs();
+    };
+    wrap.appendChild(sel1);
+    wrap.appendChild(sel2);
+    wrap.appendChild(rm);
+    host.appendChild(wrap);
+  });
+}
+
+document.getElementById('v3AddTenurePair').addEventListener('click', () => {
+  v3.tenurePairRows.push({ t1: v3.uniqueTenures[0] || '', t2: v3.uniqueTenures[1] || '' });
+  v3RenderTenurePairs();
+});
+
+const v3ThresholdInput = document.getElementById('v3Threshold');
+v3ThresholdInput.addEventListener('input', () => {
+  v3.threshold = parseInt(v3ThresholdInput.value, 10) || 5;
+  document.getElementById('v3ThresholdVal').textContent = v3.threshold;
+});
+document.getElementById('v3AllowPrePost2000').addEventListener('change', e => {
+  v3.allowPrePost2000 = !!e.target.checked;
+});
+document.getElementById('v3IncludeInclusive').addEventListener('change', e => {
+  v3.includeInclusive = !!e.target.checked;
+});
+
+document.getElementById('v3BackToColumns').addEventListener('click', () => setV3Step(2));
+document.getElementById('v3RunBtn').addEventListener('click', v3RunConsolidation);
+
+function v3CollectTenurePairs() {
+  const pairs = {};
+  for (const row of v3.tenurePairRows) {
+    const a = (row.t1 || '').trim();
+    const b = (row.t2 || '').trim();
+    if (!a || !b || a === b) continue;
+    if (!pairs[a]) pairs[a] = [];
+    if (!pairs[b]) pairs[b] = [];
+    if (!pairs[a].includes(b)) pairs[a].push(b);
+    if (!pairs[b].includes(a)) pairs[b].push(a);
+  }
+  return pairs;
+}
+
+function v3RunConsolidation() {
+  const validRows = v3ValidRows();
+  if (!validRows.length) {
+    alert('No valid rows to consolidate. Check the column selection on step 2.');
+    return;
+  }
+  const pairs = v3CollectTenurePairs();
+  v3.processor = new V3DataProcessor(validRows, v3.assetGroupCol, v3.countCol, v3.ageBandPos, v3.tenurePos);
+  v3.processor.setTenurePairs(pairs);
+  v3.processor.setAllowPrePost2000(v3.allowPrePost2000);
+  v3.stats = v3.processor.applyMerges(v3.threshold, v3.includeInclusive);
+
+  const groups = v3.processor.groups;
+  const groupsBefore = groups.length;
+  const uniqueAfter = new Set(groups.map(g => g.mergedAssetGroup)).size;
+  const smallBefore = groups.filter(g => g.properties < v3.threshold).length;
+  const mergedTotals = new Map();
+  for (const g of groups) {
+    mergedTotals.set(g.mergedAssetGroup, (mergedTotals.get(g.mergedAssetGroup) || 0) + g.properties);
+  }
+  let smallAfter = 0;
+  for (const v of mergedTotals.values()) if (v < v3.threshold) smallAfter++;
+
+  document.getElementById('v3StatGroupsBefore').textContent = groupsBefore.toLocaleString();
+  document.getElementById('v3StatGroupsAfter').textContent = uniqueAfter.toLocaleString();
+  document.getElementById('v3StatSmallBefore').textContent = smallBefore.toLocaleString();
+  document.getElementById('v3StatSmallAfter').textContent = smallAfter.toLocaleString();
+  document.getElementById('v3StatMergesThreshold').textContent = v3.stats.smallGroupsMerged.toLocaleString();
+  document.getElementById('v3StatMergesInclusive').textContent = v3.stats.inclusiveGroupsMerged.toLocaleString();
+
+  v3RenderMergeTable();
+  document.getElementById('v3Results').classList.remove('hidden');
+  document.getElementById('v3Results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function v3RenderMergeTable() {
+  const table = document.getElementById('v3MergeTable');
+  const rows = v3.processor.groups
+    .filter(g => g.mergedAssetGroup !== g.originalAssetGroup)
+    .slice();
+  rows.sort((a, b) => {
+    const byMerged = naturalCompare(a.mergedAssetGroup, b.mergedAssetGroup);
+    if (byMerged !== 0) return byMerged;
+    return b.properties - a.properties;
+  });
+
+  let html = '<thead><tr>' +
+    '<th>Original group</th>' +
+    '<th style="text-align:right;">Properties</th>' +
+    '<th>Consolidated into</th>' +
+    '<th>Reason</th>' +
+    '</tr></thead><tbody>';
+
+  if (!rows.length) {
+    html += `<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--muted);">No merges were applied with the current settings. Try lowering the threshold or adding more tenure pairs.</td></tr>`;
+  } else {
+    for (const g of rows) {
+      html += '<tr>' +
+        `<td>${escapeHtml(g.originalAssetGroup)}</td>` +
+        `<td style="text-align:right; font-variant-numeric: tabular-nums;">${g.properties.toLocaleString()}</td>` +
+        `<td class="highlight" style="font-weight:600;">${escapeHtml(g.mergedAssetGroup)}</td>` +
+        `<td style="color:var(--muted); font-size:12px;">${escapeHtml(g.mergeSource || '')}</td>` +
+        '</tr>';
+    }
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+  document.getElementById('v3MergeSummary').textContent =
+    `${rows.length.toLocaleString()} row${rows.length === 1 ? '' : 's'} consolidated`;
+}
+
+/* ---------- V3 export ---------- */
+document.getElementById('v3DownloadXlsx').addEventListener('click', downloadV3Xlsx);
+
+function downloadV3Xlsx() {
+  try {
+    if (!v3.processor || !v3.processor.groups || !v3.processor.groups.length) {
+      alert('Nothing to export yet — please run consolidation first.');
+      return;
+    }
+    const groups = v3.processor.groups;
+    const ageBandPos = v3.processor.ageBandPos;
+    const tenurePos = v3.processor.tenurePos;
+    const parsedLen = groups[0] ? groups[0].parts.length : 0;
+    const attributePositions = [];
+    for (let i = 0; i < parsedLen; i++) {
+      if (i === ageBandPos) continue;
+      if (i === tenurePos) continue;
+      attributePositions.push(i);
+    }
+
+    const header = ['Original Asset Group', 'Properties', 'Merged Asset Group', 'Merge Type'];
+    if (ageBandPos != null) header.push('Age Band');
+    attributePositions.forEach(p => header.push(`Attribute ${p + 1}`));
+    header.push('Tenure');
+
+    const aoa = [header];
+    for (const g of groups) {
+      const merged = g.mergedAssetGroup !== g.originalAssetGroup;
+      const row = [
+        g.originalAssetGroup,
+        g.properties,
+        merged ? g.mergedAssetGroup : '',
+        merged ? (g.mergeSource || '') : '',
+      ];
+      if (ageBandPos != null) row.push(g.ageBand);
+      attributePositions.forEach(p => row.push(g.parts[p] ?? ''));
+      row.push(g.tenure);
+      aoa.push(row);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = header.map(h => ({ wch: Math.max(16, h.length + 2) }));
+    const wb = XLSX.utils.book_new();
+    appendSheet(wb, ws, 'Consolidated');
+    const base = (v3.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
+    saveWorkbook(wb, `${base} - asset group v3.xlsx`, 'xlsx');
+  } catch (err) {
+    console.error('v3 export failed:', err);
+    alert('Could not build the .xlsx file: ' + (err && err.message ? err.message : err));
+  }
 }
 
 /* ====================================================== */
