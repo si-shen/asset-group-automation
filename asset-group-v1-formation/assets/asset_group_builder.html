@@ -2329,12 +2329,16 @@ function mergeGroupNames(members) {
   const numAttrs = Math.max(...parts.map(p => p.length));
   const out = [];
   for (let i = 0; i < numAttrs; i++) {
-    // ordered de-dup so the first-seen attribute order wins, but with natural sort
+    // De-dup attribute values case-insensitively (so "Staffordshire" and
+    // "staffordshire" collapse to one), but keep the first-seen casing in
+    // the output. Sort with naturalCompare's case-insensitive comparator.
     const distinct = [];
     const seen = new Set();
     for (const p of parts) {
       const v = (i < p.length ? p[i] : '').trim();
-      if (v && !seen.has(v)) { seen.add(v); distinct.push(v); }
+      if (!v) continue;
+      const key = v.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); distinct.push(v); }
     }
     distinct.sort(naturalCompare);
     out.push(distinct.join(' & '));
