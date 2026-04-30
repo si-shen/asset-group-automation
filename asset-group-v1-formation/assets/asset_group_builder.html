@@ -918,6 +918,13 @@ const v3 = {
   fileName: '',
   assetGroupCol: null,
   countCol: null,
+  // Property-level snapshot (when available): rows + headers from BEFORE
+  // auto-aggregation, used to emit a property-level sheet with an
+  // `asset group v3` column on download. Empty when V3 was given an
+  // already-aggregated sheet directly.
+  propertyRows: [],
+  propertyHeaders: [],
+  linkColumn: null,         // column in propertyRows to look up v3 by (typically 'asset group v2')
   parsedPositionCount: 0,   // number of '|'-split pieces in the first asset-group name
   ageBandPos: null,         // 0-based index into the split, or null
   tenurePos: null,          // 0-based index into the split
@@ -2131,6 +2138,14 @@ function v2HandoffToV3() {
   v3.rows = rows;
   v3.assetGroupCol = assetCol;
   v3.countCol = countCol;
+  // Snapshot the property-level rows so the V3 export can emit a
+  // properties sheet with an "asset group v3" column added next to v2.
+  // V2 puts asset-group-v2 right after the original headers, so this
+  // ordering is already correct.
+  v3.propertyRows = v2.mergedRows.map(r => ({ ...r }));
+  v3.propertyHeaders = [...v2.headers];
+  if (!v3.propertyHeaders.includes(assetCol)) v3.propertyHeaders.push(assetCol);
+  v3.linkColumn = assetCol;
   v3.ageBandPos = null;
   v3.tenurePos = null;
   v3.tenurePairRows = [];
@@ -2833,12 +2848,21 @@ async function v3HandleFile(file) {
 
     const detection = v3DetectPropertyLevel();
     if (detection) {
+      // Snapshot property-level data BEFORE auto-aggregate overwrites v3.rows,
+      // so the export can emit a properties sheet with `asset group v3` added.
+      v3.propertyRows = rows.map(r => ({ ...r }));
+      v3.propertyHeaders = [...headers];
+      v3.linkColumn = detection.agCol;
       v3ApplyAutoAggregate(detection);
       document.getElementById('v3FileSummary').innerHTML =
         `${detection.propertyCount.toLocaleString()} property rows · auto-aggregated to ` +
         `<strong>${detection.groupCount.toLocaleString()} asset groups</strong> · sheet "${escapeHtml(sheetName)}"`;
       v3ShowAggregateNotice(detection, 'upload');
     } else {
+      // Already-aggregated input — no property rows to enrich.
+      v3.propertyRows = [];
+      v3.propertyHeaders = [];
+      v3.linkColumn = null;
       document.getElementById('v3FileSummary').textContent =
         `${rows.length.toLocaleString()} rows · ${headers.length} columns · sheet "${sheetName}"`;
       v3HideAggregateNotice();
@@ -3311,6 +3335,39 @@ function v3BuildPivotSheet() {
   return ws;
 }
 
+/* Property-level sheet: each original row + an `asset group v3` column
+   inserted right after the link column (typically `asset group v2`).
+   Returns null if no property-level data is available (e.g. user uploaded
+   an already-aggregated sheet directly). */
+function v3BuildPropertyRowsSheet() {
+  if (!v3.propertyRows || !v3.propertyRows.length || !v3.linkColumn) return null;
+  const v3Col = 'asset group v3';
+
+  // originalAssetGroup → mergedAssetGroup. Built once.
+  const lookup = new Map();
+  for (const g of v3.processor.groups) {
+    lookup.set(g.originalAssetGroup, g.mergedAssetGroup);
+  }
+
+  // Insert v3 column right after the link column; if the link col isn't
+  // in headers (shouldn't happen, but defensive), append at the end.
+  const headers = v3.propertyHeaders.filter(h => h !== v3Col);
+  const linkIdx = headers.indexOf(v3.linkColumn);
+  if (linkIdx === -1) headers.push(v3Col);
+  else headers.splice(linkIdx + 1, 0, v3Col);
+
+  const aoa = [headers];
+  for (const r of v3.propertyRows) {
+    const linkVal = fmtVal(r[v3.linkColumn]);
+    const v3Val = lookup.get(linkVal) || linkVal;
+    const row = headers.map(h => h === v3Col ? v3Val : (r[h] ?? ''));
+    aoa.push(row);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(16, h.length + 2) }));
+  return ws;
+}
+
 function downloadV3Xlsx() {
   try {
     if (!v3.processor || !v3.processor.groups || !v3.processor.groups.length) {
@@ -3350,6 +3407,10 @@ function downloadV3Xlsx() {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = header.map(h => ({ wch: Math.max(16, h.length + 2) }));
     const wb = XLSX.utils.book_new();
+    // If we have the property-level rows, emit them first as the most
+    // useful artifact: original rows with asset group v3 added next to v2.
+    const propWs = v3BuildPropertyRowsSheet();
+    if (propWs) appendSheet(wb, propWs, 'Properties');
     appendSheet(wb, ws, 'Consolidated');
     appendSheet(wb, v3BuildPivotSheet(), 'asset group v3 pivot');
     const base = (v3.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
