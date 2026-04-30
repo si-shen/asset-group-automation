@@ -311,6 +311,100 @@
     color: var(--muted);
     font-size: 14px;
   }
+
+  /* ---------- header row picker modal ---------- */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 28, 45, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 24px;
+  }
+  .modal {
+    background: var(--panel);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 960px;
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  }
+  .modal-header {
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-header h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+  .modal-header .subtitle { margin: 0; color: var(--muted); font-size: 13px; }
+  .modal-body {
+    padding: 16px 24px;
+    overflow: auto;
+    flex: 1;
+  }
+  .modal-footer {
+    padding: 14px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .modal-footer .summary { font-size: 12px; color: var(--muted); }
+
+  .picker-warn {
+    background: #fff8e6;
+    border: 1px solid #f0c674;
+    color: #6b4f00;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .picker-table { font-size: 13px; }
+  .picker-table th.row-num-col,
+  .picker-table td.row-num-col {
+    width: 56px;
+    text-align: center;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .picker-table th.pick-col,
+  .picker-table td.pick-col {
+    width: 40px;
+    text-align: center;
+  }
+  .picker-table tr.picker-row { cursor: pointer; }
+  .picker-table tr.picker-row td.cell {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .picker-table tr.is-skipped td:not(.pick-col):not(.row-num-col) {
+    color: #aab2bd;
+    background: #fbfcfd;
+  }
+  .picker-table tr.is-header td {
+    background: var(--accent-soft) !important;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .picker-table tr.is-data td:not(.pick-col):not(.row-num-col) {
+    background: white;
+  }
+  .picker-table tr.picker-row:hover td:not(.pick-col):not(.row-num-col) {
+    background: #f0f4ff;
+  }
+  .picker-table tr.is-blank { cursor: not-allowed; }
+  .picker-table tr.is-blank td { color: #c2c9d5; }
+  .picker-table tr.is-blank:hover td:not(.pick-col):not(.row-num-col) {
+    background: inherit;
+  }
+  .picker-table .empty-cell { color: #c2c9d5; font-style: italic; }
 </style>
 </head>
 <body>
@@ -428,6 +522,8 @@
         <div class="stat"><div class="val" id="v1StatUniqueGroups">0</div><div class="lbl">Unique asset groups</div></div>
         <div class="stat"><div class="val" id="v1StatAttrs">0</div><div class="lbl">Attributes used</div></div>
         <div class="stat"><div class="val" id="v1StatAvgSize">0</div><div class="lbl">Avg properties per group</div></div>
+        <div class="stat"><div class="val" id="v1StatLargeGroups">0</div><div class="lbl">Groups &gt; 300 properties</div></div>
+        <div class="stat"><div class="val" id="v1StatSmallGroups">0</div><div class="lbl">Groups &lt; 5 properties</div></div>
       </div>
 
       <div class="table-wrap">
@@ -500,6 +596,22 @@
         </div>
       </div>
 
+      <div id="v2ExclusionPanel" class="hidden" style="margin-top:18px; padding:16px 18px; border:1px solid var(--border); border-radius:8px; background:#fafbfc;">
+        <h3 style="margin:0 0 4px; font-size:15px; font-weight:600;">Exclude block values from merging?</h3>
+        <p class="subtitle" style="margin:0 0 12px;" id="v2ExclusionSubtitle">Pick any block-reference value that's a placeholder rather than a real block. Properties with a ticked value will keep their <strong>asset group v1</strong> unchanged in v2 instead of being merged together.</p>
+        <div class="table-wrap" style="max-height:320px;">
+          <table id="v2ExclusionTable" style="font-size:13px;"></table>
+        </div>
+        <div class="toolbar" style="margin-top:10px;">
+          <div class="left">
+            <button class="btn" id="v2ExclusionShowAll" type="button"></button>
+          </div>
+          <div class="right">
+            <span id="v2ExclusionSummary" style="color:var(--muted); font-size:12px;"></span>
+          </div>
+        </div>
+      </div>
+
       <div class="toolbar">
         <button class="btn" id="v2BackToUpload">← Back</button>
         <button class="btn btn-primary" id="v2GenerateBtn" disabled>Pivot &amp; merge →</button>
@@ -511,12 +623,17 @@
       <h2>Step 3 · Pivot &amp; merge asset groups</h2>
       <p class="subtitle">When a non-empty, non-zero block reference contains more than one asset group, those groups merge into a single <strong>asset group v2</strong> — but the merge happens <strong>block by block</strong>. If A &amp; B share block X and B &amp; C share block Y, you get two independent merges (A+B for block X, B+C for block Y); they do not combine into A+B+C. Attributes are compared position-by-position: matching values stay, different values are joined with <code>&amp;</code>. The asset group v2 is added to both the pivot table and the original property rows.</p>
 
+      <div id="v2ExcludedWarn" class="hidden" style="margin-bottom:16px; padding:12px 14px; border:1px solid #f0c674; background:#fff8e6; border-radius:8px; font-size:13px; color:#6b4f00; line-height:1.55;"></div>
+
       <div class="stats-row">
         <div class="stat"><div class="val" id="v2StatBlocks">0</div><div class="lbl">Unique block refs</div></div>
         <div class="stat"><div class="val" id="v2StatV1Groups">0</div><div class="lbl">Asset groups v1</div></div>
         <div class="stat"><div class="val" id="v2StatV2Groups">0</div><div class="lbl">Asset groups v2 (after merge)</div></div>
         <div class="stat"><div class="val" id="v2StatClustersMerged">0</div><div class="lbl">Merged blocks</div></div>
         <div class="stat"><div class="val" id="v2StatPropsAffected">0</div><div class="lbl">Properties re-grouped</div></div>
+        <div class="stat"><div class="val" id="v2StatAvgSize">0</div><div class="lbl">Avg properties per v2 group</div></div>
+        <div class="stat"><div class="val" id="v2StatLargeGroups">0</div><div class="lbl">v2 groups &gt; 300 properties</div></div>
+        <div class="stat"><div class="val" id="v2StatSmallGroups">0</div><div class="lbl">v2 groups &lt; 5 properties</div></div>
       </div>
 
       <h3 style="margin: 8px 0 8px; font-size:15px; font-weight:600;">Pivot table (block × asset group v1 × v2)</h3>
@@ -652,6 +769,19 @@
       </div>
 
       <div style="margin-bottom: 22px;">
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Merge priority</label>
+        <div class="field-hint" style="margin-bottom: 10px;">When a small group has multiple valid merge partners, which factor ranks candidates first? Both factors must pass the merge rules either way — this only changes which one wins when more than one candidate is valid.</div>
+        <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
+          <input type="radio" name="v3Prioritise" value="tenure" checked style="margin-top:3px;">
+          <span><strong>Tenure first</strong> (default) — prefer same/inclusive/paired tenure; use age band as tiebreaker.</span>
+        </label>
+        <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="radio" name="v3Prioritise" value="ageband" style="margin-top:3px;">
+          <span><strong>Age band first</strong> — prefer the same/closest age band; use tenure as tiebreaker.</span>
+        </label>
+      </div>
+
+      <div style="margin-bottom: 22px;">
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Mergeable tenure pairs</label>
         <div class="field-hint" style="margin-bottom: 10px;">Pairs of tenure types that your organisation allows to combine (for example <code>AR</code> with <code>GN</code>). A small group is only merged with a partner whose tenure matches exactly, is inclusive (e.g. <code>GN &amp; AR</code> includes <code>GN</code>), or appears in one of the pairs you list here.</div>
         <div id="v3TenurePairs"></div>
@@ -690,10 +820,13 @@
         <div class="stats-row">
           <div class="stat"><div class="val" id="v3StatGroupsBefore">0</div><div class="lbl">Groups before</div></div>
           <div class="stat"><div class="val" id="v3StatGroupsAfter">0</div><div class="lbl">Groups after</div></div>
-          <div class="stat"><div class="val" id="v3StatSmallBefore">0</div><div class="lbl">Small groups before</div></div>
-          <div class="stat"><div class="val" id="v3StatSmallAfter">0</div><div class="lbl">Small groups after</div></div>
+          <div class="stat"><div class="val" id="v3StatSmallBefore">0</div><div class="lbl">Small groups before (&lt; threshold)</div></div>
+          <div class="stat"><div class="val" id="v3StatSmallAfter">0</div><div class="lbl">Small groups after (&lt; threshold)</div></div>
           <div class="stat"><div class="val" id="v3StatMergesThreshold">0</div><div class="lbl">Rows merged (threshold)</div></div>
           <div class="stat"><div class="val" id="v3StatMergesInclusive">0</div><div class="lbl">Rows merged (overlapping)</div></div>
+          <div class="stat"><div class="val" id="v3StatAvgSize">0</div><div class="lbl">Avg properties per v3 group</div></div>
+          <div class="stat"><div class="val" id="v3StatLargeGroups">0</div><div class="lbl">v3 groups &gt; 300 properties</div></div>
+          <div class="stat"><div class="val" id="v3StatSmallLT5">0</div><div class="lbl">v3 groups &lt; 5 properties</div></div>
         </div>
 
         <h3 style="margin: 20px 0 8px; font-size:15px; font-weight:600;">Consolidated asset groups</h3>
@@ -712,6 +845,31 @@
     </section>
   </div>
 
+</div>
+
+<!-- ====================================================== -->
+<!-- HEADER ROW PICKER (shared by V1, V2, V3 uploads)        -->
+<!-- ====================================================== -->
+<div class="modal-overlay hidden" id="headerPickerModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Confirm header row</h2>
+      <p class="subtitle" id="headerPickerSubtitle">Select the row that contains the column names. We've pre-selected our best guess — change it if it's wrong.</p>
+    </div>
+    <div class="modal-body">
+      <div class="picker-warn hidden" id="headerPickerWarn"></div>
+      <div class="table-wrap">
+        <table class="picker-table" id="headerPickerTable"></table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="summary" id="headerPickerSummary"></span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="headerPickerCancel">Cancel</button>
+        <button class="btn btn-primary" id="headerPickerConfirm">Use this header row</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -738,6 +896,9 @@ const v2 = {
   fileName: "",
   blockRefCol: null,
   assetGroupCol: null,
+  // block-value exclusion (set by the user in step 2 via the exclusion table)
+  excludedBlockValues: new Set(), // canonical block-ref strings ('' for blank)
+  blockTallies: [],               // [{ canon, display, count, groupCount }] sorted by count desc
   pivotRows: [],
   pivotBlockCount: 0,
   // merge step
@@ -745,6 +906,8 @@ const v2 = {
   mergedRows: [],           // rows + asset group v2 column
   clusters: [],             // [{ v2name, members:[v1...], blocks:[...], propertyCount, merged }]
   unchangedGroups: [],      // v1 groups that never participate in any merge
+  excludedByValue: new Map(),
+  excludedTotal: 0,
 };
 
 const v3 = {
@@ -762,6 +925,7 @@ const v3 = {
   threshold: 5,
   allowPrePost2000: false,
   includeInclusive: false,
+  prioritise: 'tenure',     // 'tenure' | 'ageband' — which factor ranks merge candidates first
   processor: null,          // V3DataProcessor instance
   stats: null,
   uniqueTenures: [],
@@ -824,7 +988,7 @@ const setV3Step = (n) => setStep(v3StepsEl, v3Panels, n);
 /* ====================================================== */
 /* shared file reading                                     */
 /* ====================================================== */
-function readWorkbook(file) {
+function readWorkbookRaw(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -833,14 +997,242 @@ function readWorkbook(file) {
         const wb = XLSX.read(data, { type: 'array' });
         const sheetName = wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
-        if (!json.length) return reject(new Error('That file has no data rows.'));
-        const headers = Object.keys(json[0]);
-        resolve({ workbook: wb, sheetName, headers, rows: json });
+        // blankrows: true so that "Row N" labels in the picker match
+        // the user's Excel row numbers (blank rows above the header are visible
+        // in the preview, just disabled for selection).
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: true });
+        if (!aoa.length) return reject(new Error('That file has no data rows.'));
+        // Drop trailing fully-blank rows so they don't pad the preview tail.
+        while (aoa.length && (!aoa[aoa.length - 1] || aoa[aoa.length - 1].every(c => c == null || String(c).trim() === ''))) {
+          aoa.pop();
+        }
+        if (!aoa.length) return reject(new Error('That file has no data rows.'));
+        resolve({ workbook: wb, sheetName, aoa });
       } catch (err) { reject(err); }
     };
+    reader.onerror = () => reject(new Error('Could not read that file.'));
     reader.readAsArrayBuffer(file);
   });
+}
+
+function columnLetter(n) {
+  let s = '';
+  let x = n;
+  do {
+    s = String.fromCharCode(65 + (x % 26)) + s;
+    x = Math.floor(x / 26) - 1;
+  } while (x >= 0);
+  return s;
+}
+
+function isNumericString(s) {
+  if (s === '' || s == null) return false;
+  const cleaned = String(s).replace(/[,$£€%\s]/g, '');
+  if (cleaned === '' || cleaned === '-' || cleaned === '.') return false;
+  return !isNaN(Number(cleaned));
+}
+
+/* Detect the most likely header row.
+   First row where: >=2 non-empty cells reaching >=50% of the widest scanned row,
+   and >50% of non-empty cells are non-numeric. Falls back to row 0.
+   We deliberately do NOT require unique cell values — real spreadsheets often
+   ship with duplicate header names (e.g. two "Property Type" columns), and
+   duplicates are de-duped with a suffix once the user confirms. */
+function detectHeaderRow(aoa, maxScan = 25) {
+  const limit = Math.min(aoa.length, maxScan);
+  let maxWidth = 0;
+  for (let i = 0; i < limit; i++) {
+    if (aoa[i] && aoa[i].length > maxWidth) maxWidth = aoa[i].length;
+  }
+  for (let i = 0; i < limit; i++) {
+    const row = aoa[i] || [];
+    const cells = row.map(c => (c == null ? '' : String(c).trim()));
+    const nonEmpty = cells.filter(c => c !== '');
+    if (nonEmpty.length < 2) continue;
+    if (maxWidth >= 3 && nonEmpty.length < maxWidth * 0.5) continue;
+    const numeric = nonEmpty.filter(isNumericString);
+    if (numeric.length / nonEmpty.length > 0.5) continue;
+    return i;
+  }
+  return 0;
+}
+
+/* Given the AoA and a chosen header row index, build deduped headers
+   and row objects. Empty header cells get a "Column X" placeholder; duplicates get suffixes. */
+function buildRowsFromAoa(aoa, headerRowIndex) {
+  const rawHeaders = (aoa[headerRowIndex] || []).map(c => (c == null ? '' : String(c).trim()));
+  let width = rawHeaders.length;
+  for (let i = headerRowIndex + 1; i < aoa.length; i++) {
+    const r = aoa[i];
+    if (r && r.length > width) width = r.length;
+  }
+  const seen = new Map();
+  const headers = [];
+  let emptyCount = 0;
+  let dupCount = 0;
+  for (let c = 0; c < width; c++) {
+    let name = rawHeaders[c] || '';
+    if (!name) {
+      name = `Column ${columnLetter(c)}`;
+      emptyCount++;
+    }
+    if (seen.has(name)) {
+      const n = seen.get(name) + 1;
+      seen.set(name, n);
+      headers.push(`${name} (${n})`);
+      dupCount++;
+    } else {
+      seen.set(name, 1);
+      headers.push(name);
+    }
+  }
+  const rows = [];
+  for (let i = headerRowIndex + 1; i < aoa.length; i++) {
+    const r = aoa[i] || [];
+    let allEmpty = true;
+    for (const v of r) {
+      if (v != null && String(v).trim() !== '') { allEmpty = false; break; }
+    }
+    if (allEmpty) continue;
+    const obj = {};
+    for (let c = 0; c < headers.length; c++) {
+      const v = r[c];
+      obj[headers[c]] = (v == null) ? '' : v;
+    }
+    rows.push(obj);
+  }
+  return { headers, rows, warnings: { emptyCount, dupCount } };
+}
+
+/* Modal: present preview of the first ~15 rows, let user pick the header row.
+   Resolves with the chosen index, rejects with { cancelled: true } on cancel. */
+function pickHeaderRow(aoa, defaultIndex, fileName, sheetName) {
+  return new Promise((resolve, reject) => {
+    const modal = document.getElementById('headerPickerModal');
+    const tableEl = document.getElementById('headerPickerTable');
+    const subtitle = document.getElementById('headerPickerSubtitle');
+    const warnEl = document.getElementById('headerPickerWarn');
+    const summaryEl = document.getElementById('headerPickerSummary');
+    const confirmBtn = document.getElementById('headerPickerConfirm');
+    const cancelBtn = document.getElementById('headerPickerCancel');
+
+    let selectedIndex = defaultIndex;
+
+    subtitle.innerHTML =
+      `<strong>${escapeHtml(fileName)}</strong> &middot; sheet "${escapeHtml(sheetName)}". ` +
+      `Select the row that contains the column names. ` +
+      `We've pre-selected <strong>row ${defaultIndex + 1}</strong> as our best guess.`;
+
+    const previewCount = Math.min(aoa.length, 15);
+    let maxCols = 0;
+    for (let i = 0; i < previewCount; i++) {
+      if (aoa[i] && aoa[i].length > maxCols) maxCols = aoa[i].length;
+    }
+    if (maxCols === 0) maxCols = 1;
+    const displayCols = Math.min(maxCols, 12);
+    const truncated = maxCols > displayCols;
+
+    let html = '<thead><tr>';
+    html += '<th class="pick-col"></th>';
+    html += '<th class="row-num-col">Row</th>';
+    for (let c = 0; c < displayCols; c++) {
+      html += `<th>${columnLetter(c)}</th>`;
+    }
+    if (truncated) html += `<th>&hellip;</th>`;
+    html += '</tr></thead><tbody>';
+
+    for (let i = 0; i < previewCount; i++) {
+      const row = aoa[i] || [];
+      const isBlank = row.every(c => c == null || String(c).trim() === '');
+      const rowClass = isBlank ? 'picker-row is-blank' : 'picker-row';
+      const disabledAttr = isBlank ? ' disabled' : '';
+      html += `<tr class="${rowClass}" data-row-index="${i}" data-blank="${isBlank ? '1' : '0'}">`;
+      html += `<td class="pick-col"><input type="radio" name="headerRowPick" value="${i}"${i === defaultIndex ? ' checked' : ''}${disabledAttr}></td>`;
+      html += `<td class="row-num-col">${i + 1}</td>`;
+      for (let c = 0; c < displayCols; c++) {
+        const raw = row[c];
+        const text = (raw == null || String(raw).trim() === '')
+          ? '<span class="empty-cell">(empty)</span>'
+          : escapeHtml(String(raw));
+        html += `<td class="cell">${text}</td>`;
+      }
+      if (truncated) html += `<td class="cell empty-cell">&hellip;</td>`;
+      html += '</tr>';
+    }
+    html += '</tbody>';
+    tableEl.innerHTML = html;
+
+    const updateSelection = () => {
+      tableEl.querySelectorAll('tr.picker-row').forEach(tr => {
+        const idx = +tr.dataset.rowIndex;
+        tr.classList.remove('is-header', 'is-skipped', 'is-data');
+        if (idx === selectedIndex) tr.classList.add('is-header');
+        else if (idx < selectedIndex) tr.classList.add('is-skipped');
+        else tr.classList.add('is-data');
+      });
+
+      const { headers, rows, warnings } = buildRowsFromAoa(aoa, selectedIndex);
+      const parts = [];
+      if (rows.length === 0) {
+        parts.push('<strong>No data rows below this header.</strong> Pick a row higher up.');
+      }
+      if (warnings.emptyCount > 0) {
+        parts.push(`<strong>${warnings.emptyCount}</strong> empty header cell${warnings.emptyCount === 1 ? '' : 's'} will be named <code>Column A</code>, <code>Column B</code>, etc.`);
+      }
+      if (warnings.dupCount > 0) {
+        parts.push(`<strong>${warnings.dupCount}</strong> duplicate header name${warnings.dupCount === 1 ? '' : 's'} will be suffixed <code>(2)</code>, <code>(3)</code>, etc.`);
+      }
+      if (parts.length) {
+        warnEl.innerHTML = parts.join('<br>');
+        warnEl.classList.remove('hidden');
+      } else {
+        warnEl.classList.add('hidden');
+      }
+
+      summaryEl.textContent = `Row ${selectedIndex + 1} → ${headers.length} column${headers.length === 1 ? '' : 's'}, ${rows.length.toLocaleString()} data row${rows.length === 1 ? '' : 's'}`;
+      confirmBtn.disabled = rows.length === 0;
+    };
+
+    tableEl.querySelectorAll('tr.picker-row').forEach(tr => {
+      tr.addEventListener('click', () => {
+        if (tr.dataset.blank === '1') return;
+        const idx = +tr.dataset.rowIndex;
+        const radio = tr.querySelector('input[type=radio]');
+        if (radio) radio.checked = true;
+        selectedIndex = idx;
+        updateSelection();
+      });
+    });
+
+    const cleanup = () => {
+      modal.classList.add('hidden');
+      confirmBtn.removeEventListener('click', onConfirm);
+      cancelBtn.removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKey);
+    };
+    const onConfirm = () => { cleanup(); resolve(selectedIndex); };
+    const onCancel = () => { cleanup(); const e = new Error('cancelled'); e.cancelled = true; reject(e); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') onCancel();
+      else if (e.key === 'Enter' && !confirmBtn.disabled) onConfirm();
+    };
+
+    confirmBtn.addEventListener('click', onConfirm);
+    cancelBtn.addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKey);
+
+    updateSelection();
+    modal.classList.remove('hidden');
+  });
+}
+
+async function readWorkbook(file) {
+  const { workbook, sheetName, aoa } = await readWorkbookRaw(file);
+  const defaultIndex = detectHeaderRow(aoa);
+  const headerRowIndex = await pickHeaderRow(aoa, defaultIndex, file.name, sheetName);
+  const { headers, rows } = buildRowsFromAoa(aoa, headerRowIndex);
+  if (!rows.length) throw new Error('No data rows below the chosen header row.');
+  return { workbook, sheetName, headers, rows };
 }
 
 /* ====================================================== */
@@ -884,6 +1276,10 @@ async function v1HandleFile(file) {
     v1PopulateFilter();
     setV1Step(2);
   } catch (err) {
+    if (err && err.cancelled) {
+      v1FileInput.value = '';
+      return;
+    }
     alert('Could not read file: ' + err.message);
   }
 }
@@ -1049,11 +1445,18 @@ function v1GenerateGroups() {
     return { ...r, [colName]: name };
   });
 
+  let v1Large = 0, v1Small = 0;
+  for (const c of seen.values()) {
+    if (c > 300) v1Large++;
+    if (c < 5) v1Small++;
+  }
   document.getElementById('v1StatTotalRows').textContent = v1.outputRows.length.toLocaleString();
   document.getElementById('v1StatUniqueGroups').textContent = seen.size.toLocaleString();
   document.getElementById('v1StatAttrs').textContent = v1.selectedCols.length;
   document.getElementById('v1StatAvgSize').textContent =
     (v1.outputRows.length / seen.size).toFixed(1);
+  document.getElementById('v1StatLargeGroups').textContent = v1Large.toLocaleString();
+  document.getElementById('v1StatSmallGroups').textContent = v1Small.toLocaleString();
 
   v1RenderPreviewTable();
   setV1Step(4);
@@ -1146,6 +1549,8 @@ function v1HandoffToV2() {
   v2.rows = v1.outputRows.map(r => ({ ...r }));
   v2.blockRefCol = null;
   v2.assetGroupCol = 'asset group v1';
+  v2.excludedBlockValues = new Set();
+  v2.blockTallies = [];
   v2.pivotRows = [];
 
   // mark v2 upload as already provided
@@ -1212,6 +1617,10 @@ async function v2HandleFile(file) {
     v2PopulateColumnSelectors();
     setV2Step(2);
   } catch (err) {
+    if (err && err.cancelled) {
+      v2FileInput.value = '';
+      return;
+    }
     alert('Could not read file: ' + err.message);
   }
 }
@@ -1252,19 +1661,183 @@ function v2PopulateColumnSelectors() {
   v2.assetGroupCol = groupGuess || null;
   updateV2ColumnHint('block');
   updateV2ColumnHint('group');
+  v2RebuildExclusionPanel();
   updateV2BuildEnabled();
 
   blockSel.onchange = () => {
     v2.blockRefCol = blockSel.value || null;
     updateV2ColumnHint('block');
+    v2RebuildExclusionPanel();
     updateV2BuildEnabled();
   };
   groupSel.onchange = () => {
     v2.assetGroupCol = groupSel.value || null;
     updateV2ColumnHint('group');
+    // groupCount column in the exclusion table depends on the group column,
+    // so re-render (but keep current ticks)
+    v2RenderExclusionTable();
     updateV2BuildEnabled();
   };
 }
+
+/* ---------- block-value exclusion (step 2) ---------- */
+
+const V2_EXCLUSION_TOP_N = 15;
+let v2ExclusionShowAll = false;
+
+/* Tally block-ref values to canonical-form -> { count, groupCount }.
+   Pure rollup; no opinion on which to exclude. */
+function v2ComputeBlockTallies() {
+  const blockCol = v2.blockRefCol;
+  if (!blockCol) return [];
+  const groupCol = v2.assetGroupCol;
+  const tally = new Map();
+  for (const r of v2.rows) {
+    const canon = canonicalizeBlockRef(r[blockCol]);
+    if (!tally.has(canon)) tally.set(canon, { count: 0, groups: new Set() });
+    const t = tally.get(canon);
+    t.count++;
+    if (groupCol) {
+      const g = fmtVal(r[groupCol]);
+      if (g) t.groups.add(g);
+    }
+  }
+  return [...tally.entries()].map(([canon, info]) => ({
+    canon,
+    display: canon === '' ? '(blank)' : canon,
+    count: info.count,
+    groupCount: info.groups.size,
+  })).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return naturalCompare(a.display, b.display);
+  });
+}
+
+/* Default-exclude only the unambiguous cases: blank and pure-zero values
+   ("0", "00", "0.0"). Everything else is left for the user to tick. */
+function v2DefaultExclusions(tallies) {
+  const out = new Set();
+  for (const t of tallies) {
+    if (t.canon === '') out.add('');
+    else if (/^0+(\.0+)?$/.test(t.canon)) out.add(t.canon);
+  }
+  return out;
+}
+
+/* Recompute tallies + reset the user's ticks to defaults. Called when the
+   block column changes (or is first picked). */
+function v2RebuildExclusionPanel() {
+  const panel = document.getElementById('v2ExclusionPanel');
+  if (!v2.blockRefCol) {
+    panel.classList.add('hidden');
+    v2.blockTallies = [];
+    v2.excludedBlockValues = new Set();
+    return;
+  }
+  v2.blockTallies = v2ComputeBlockTallies();
+  v2.excludedBlockValues = v2DefaultExclusions(v2.blockTallies);
+  v2ExclusionShowAll = false;
+  panel.classList.remove('hidden');
+  v2RenderExclusionTable();
+}
+
+function v2RenderExclusionTable() {
+  const tableEl = document.getElementById('v2ExclusionTable');
+  const subtitleEl = document.getElementById('v2ExclusionSubtitle');
+  const showAllBtn = document.getElementById('v2ExclusionShowAll');
+  const summaryEl = document.getElementById('v2ExclusionSummary');
+  const tallies = v2.blockTallies;
+  if (!tallies.length) {
+    tableEl.innerHTML = '<tbody><tr><td style="padding:16px; color:var(--muted); text-align:center;">No values to display.</td></tr></tbody>';
+    showAllBtn.classList.add('hidden');
+    summaryEl.textContent = '';
+    return;
+  }
+
+  const totalUnique = tallies.length;
+  const showCount = v2ExclusionShowAll ? totalUnique : Math.min(V2_EXCLUSION_TOP_N, totalUnique);
+  const visible = tallies.slice(0, showCount);
+
+  // Only show the "Distinct asset groups" column once the asset-group column
+  // is picked — otherwise every cell would just read 0 and confuse the user.
+  const showGroupCol = !!v2.assetGroupCol;
+  let html = '<thead><tr>' +
+    '<th style="width:42px;"></th>' +
+    '<th>Block value</th>' +
+    '<th style="text-align:right;">Properties</th>' +
+    (showGroupCol ? '<th style="text-align:right;">Distinct asset groups</th>' : '') +
+    '</tr></thead><tbody>';
+  for (const t of visible) {
+    const checked = v2.excludedBlockValues.has(t.canon) ? ' checked' : '';
+    const isBlank = t.canon === '';
+    html += `<tr data-canon="${escapeHtml(t.canon)}" style="cursor:pointer;">` +
+      `<td style="text-align:center;"><input type="checkbox" class="v2-exc" data-canon="${escapeHtml(t.canon)}"${checked}></td>` +
+      `<td>${isBlank ? '<em style="color:var(--muted);">(blank)</em>' : `<code>${escapeHtml(t.display)}</code>`}</td>` +
+      `<td style="text-align:right; font-variant-numeric:tabular-nums;">${t.count.toLocaleString()}</td>` +
+      (showGroupCol ? `<td style="text-align:right; font-variant-numeric:tabular-nums;">${t.groupCount.toLocaleString()}</td>` : '') +
+      `</tr>`;
+  }
+  html += '</tbody>';
+  tableEl.innerHTML = html;
+
+  if (totalUnique > V2_EXCLUSION_TOP_N) {
+    showAllBtn.classList.remove('hidden');
+    showAllBtn.textContent = v2ExclusionShowAll
+      ? `Show top ${V2_EXCLUSION_TOP_N}`
+      : `Show all ${totalUnique.toLocaleString()} values`;
+  } else {
+    showAllBtn.classList.add('hidden');
+  }
+
+  subtitleEl.innerHTML =
+    `Pick any block-reference value that's a placeholder rather than a real block. ` +
+    `Properties with a ticked value will keep their <strong>asset group v1</strong> unchanged in v2 ` +
+    `instead of being merged together. ` +
+    (totalUnique > V2_EXCLUSION_TOP_N
+      ? `Showing the top ${V2_EXCLUSION_TOP_N} most frequent of <strong>${totalUnique.toLocaleString()}</strong> values.`
+      : `<strong>${totalUnique.toLocaleString()}</strong> distinct values total.`);
+
+  const ticked = v2.excludedBlockValues.size;
+  let excludedRows = 0;
+  for (const t of tallies) {
+    if (v2.excludedBlockValues.has(t.canon)) excludedRows += t.count;
+  }
+  summaryEl.textContent = ticked
+    ? `${ticked} value${ticked === 1 ? '' : 's'} ticked → ${excludedRows.toLocaleString()} propert${excludedRows === 1 ? 'y' : 'ies'} excluded from merging`
+    : 'No values ticked — all rows will be considered for merging';
+
+  // Wire checkbox + row click toggling. Row click toggles the checkbox.
+  tableEl.querySelectorAll('tr[data-canon]').forEach(tr => {
+    const canon = tr.dataset.canon;
+    tr.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      const cb = tr.querySelector('input[type=checkbox]');
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+  tableEl.querySelectorAll('input.v2-exc').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const canon = cb.dataset.canon;
+      if (cb.checked) v2.excludedBlockValues.add(canon);
+      else v2.excludedBlockValues.delete(canon);
+      // Update only the summary, not the whole table (avoids losing scroll/focus)
+      const ticked = v2.excludedBlockValues.size;
+      let excludedRows = 0;
+      for (const t of tallies) {
+        if (v2.excludedBlockValues.has(t.canon)) excludedRows += t.count;
+      }
+      summaryEl.textContent = ticked
+        ? `${ticked} value${ticked === 1 ? '' : 's'} ticked → ${excludedRows.toLocaleString()} propert${excludedRows === 1 ? 'y' : 'ies'} excluded from merging`
+        : 'No values ticked — all rows will be considered for merging';
+    });
+  });
+}
+
+document.getElementById('v2ExclusionShowAll').addEventListener('click', () => {
+  v2ExclusionShowAll = !v2ExclusionShowAll;
+  v2RenderExclusionTable();
+});
 
 function updateV2ColumnHint(which) {
   const col = which === 'block' ? v2.blockRefCol : v2.assetGroupCol;
@@ -1304,8 +1877,14 @@ function v2BuildPivot() {
   const blockOrder = [];
   const groupSet = new Set();
 
+  // Skip rows whose block value the user opted to exclude in the step-2 UI.
+  // Their canonical block value (trimmed string, '' for blank) is in
+  // v2.excludedBlockValues — they keep their v1 unchanged in v2 downstream
+  // and don't appear in the pivot or block count.
   for (const r of v2.rows) {
-    const block = fmtVal(r[blockCol]) || '(blank)';
+    const canon = canonicalizeBlockRef(r[blockCol]);
+    if (v2.excludedBlockValues.has(canon)) continue;
+    const block = canon;
     const group = fmtVal(r[groupCol]) || '(blank)';
     if (!counts.has(block)) {
       counts.set(block, new Map());
@@ -1572,15 +2151,20 @@ function v2HandoffToV3() {
   setV3Step(2);
 }
 
-/* a block reference is "valid" for merging only if it is non-empty
-   and not literally 0 (handles "0", "0.0", " 0 ", etc.) */
-function isValidBlockRef(raw) {
-  if (raw == null) return false;
-  const s = String(raw).trim();
-  if (s === '') return false;
-  // treat any all-zero numeric value as invalid (0, 00, 0.0, etc.)
-  if (/^0+(\.0+)?$/.test(s)) return false;
-  return true;
+/* Canonical form of a block reference: trimmed string, or '' for null/empty.
+   Used as the key when comparing rows against the user's exclusion picks. */
+function canonicalizeBlockRef(raw) {
+  if (raw == null) return '';
+  return String(raw).trim();
+}
+
+/* True if the user has opted to exclude this block value from merging.
+   Block validity is now entirely user-driven via the V2 step-2 exclusion UI;
+   only blank and pure-zero are pre-checked as defaults — anything else
+   (e.g. "undefined", "null") only gets excluded when the user explicitly
+   ticks it in the UI. */
+function isExcludedBlockRef(raw) {
+  return v2.excludedBlockValues && v2.excludedBlockValues.has(canonicalizeBlockRef(raw));
 }
 
 function v2BuildMerge() {
@@ -1588,20 +2172,32 @@ function v2BuildMerge() {
   const groupCol = v2.assetGroupCol;
   if (!blockCol || !groupCol) return;
 
-  // 1. collect all distinct v1 groups + map block -> set of groups (valid blocks only)
+  // 1. collect all distinct v1 groups + map block -> set of groups.
+  //    Rows whose block value is in v2.excludedBlockValues (set by the user
+  //    in step 2) are skipped here — they keep their v1 unchanged as their
+  //    v2 in step 3, and don't contribute to any merge. We tally how many
+  //    properties each excluded value covers so step 3 can summarise them.
   const allGroups = new Set();
   const blockGroups = new Map(); // block -> Set<group>
+  const excludedByValue = new Map(); // canonical block value -> property count
+  let excludedTotal = 0;
   for (const r of v2.rows) {
     const g = fmtVal(r[groupCol]);
     if (!g) continue;
     allGroups.add(g);
 
-    const blockRaw = r[blockCol];
-    if (!isValidBlockRef(blockRaw)) continue;
-    const block = String(blockRaw).trim();
-    if (!blockGroups.has(block)) blockGroups.set(block, new Set());
-    blockGroups.get(block).add(g);
+    const canon = canonicalizeBlockRef(r[blockCol]);
+    if (v2.excludedBlockValues.has(canon)) {
+      const label = canon === '' ? '(blank)' : canon;
+      excludedByValue.set(label, (excludedByValue.get(label) || 0) + 1);
+      excludedTotal++;
+      continue;
+    }
+    if (!blockGroups.has(canon)) blockGroups.set(canon, new Set());
+    blockGroups.get(canon).add(g);
   }
+  v2.excludedByValue = excludedByValue;
+  v2.excludedTotal = excludedTotal;
 
   // 2. For each block that holds 2+ groups, compute its merged v2 name INDEPENDENTLY.
   //    Merges are NOT transitive: if block X has {A,B} and block Y has {B,C},
@@ -1621,12 +2217,9 @@ function v2BuildMerge() {
   const v2Col = 'asset group v2';
   v2.mergedRows = v2.rows.map(r => {
     const g = fmtVal(r[groupCol]);
-    const blockRaw = r[blockCol];
-    if (isValidBlockRef(blockRaw)) {
-      const block = String(blockRaw).trim();
-      if (v2.blockToV2.has(block)) {
-        return { ...r, [v2Col]: v2.blockToV2.get(block) };
-      }
+    const canon = canonicalizeBlockRef(r[blockCol]);
+    if (!v2.excludedBlockValues.has(canon) && v2.blockToV2.has(canon)) {
+      return { ...r, [v2Col]: v2.blockToV2.get(canon) };
     }
     return { ...r, [v2Col]: g };
   });
@@ -1678,14 +2271,55 @@ function v2BuildMerge() {
   v2.unchangedGroups = [...allGroups].filter(g => !mergedMembers.has(g)).sort(naturalCompare);
 
   // 6. Stats
+  const v2GroupCounts = new Map();
+  for (const r of v2.mergedRows) {
+    const name = r[v2Col];
+    if (!name) continue;
+    v2GroupCounts.set(name, (v2GroupCounts.get(name) || 0) + 1);
+  }
+  let v2Total = 0, v2Large = 0, v2Small = 0;
+  for (const c of v2GroupCounts.values()) {
+    v2Total += c;
+    if (c > 300) v2Large++;
+    if (c < 5) v2Small++;
+  }
+  const v2Avg = v2GroupCounts.size ? (v2Total / v2GroupCounts.size) : 0;
+
   document.getElementById('v2StatBlocks').textContent = (v2.pivotBlockCount || 0).toLocaleString();
   document.getElementById('v2StatV1Groups').textContent = allGroups.size.toLocaleString();
   document.getElementById('v2StatV2Groups').textContent = v2NameSet.size.toLocaleString();
   document.getElementById('v2StatClustersMerged').textContent = v2.clusters.length.toLocaleString();
   document.getElementById('v2StatPropsAffected').textContent = propsAffected.toLocaleString();
+  document.getElementById('v2StatAvgSize').textContent = v2Avg.toFixed(1);
+  document.getElementById('v2StatLargeGroups').textContent = v2Large.toLocaleString();
+  document.getElementById('v2StatSmallGroups').textContent = v2Small.toLocaleString();
 
   renderV2MergeTable();
   v2RenderPivotTable();
+  renderV2ExcludedWarn();
+}
+
+/* Step-3 summary of the block values the user opted to exclude back in step 2.
+   Single source of truth: this banner reflects v2.excludedByValue (which is
+   populated in v2BuildMerge based on v2.excludedBlockValues). */
+function renderV2ExcludedWarn() {
+  const banner = document.getElementById('v2ExcludedWarn');
+  if (!banner) return;
+  const total = v2.excludedTotal || 0;
+  if (!total) {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+    return;
+  }
+  const entries = [...v2.excludedByValue.entries()].sort((a, b) => b[1] - a[1]);
+  const chips = entries.map(([label, n]) =>
+    `<code>${escapeHtml(label)}</code> &times; ${n.toLocaleString()}`
+  ).join(' &nbsp;·&nbsp; ');
+  banner.innerHTML =
+    `<strong>${total.toLocaleString()} propert${total === 1 ? 'y' : 'ies'} excluded from merging</strong> ` +
+    `as you set in step 2 (each kept its asset group v1 unchanged):<br>` +
+    `<span style="display:inline-block; margin-top:6px;">${chips}</span>`;
+  banner.classList.remove('hidden');
 }
 
 function mergeGroupNames(members) {
@@ -1776,9 +2410,11 @@ class AssetGroupMerger {
   constructor() {
     this.tenurePairs = {};
     this.allowPrePost2000 = false;
+    this.prioritise = 'tenure';
   }
   setTenurePairs(pairs) { this.tenurePairs = pairs || {}; }
   setAllowPrePost2000(flag) { this.allowPrePost2000 = !!flag; }
+  setPrioritise(mode) { this.prioritise = mode === 'ageband' ? 'ageband' : 'tenure'; }
 
   static parseAgeBand(band) {
     if (band == null) return null;
@@ -1923,17 +2559,30 @@ class AssetGroupMerger {
   }
 
   rankMergeCandidates(smallGroup, candidates) {
+    // Strict tier ordering — each tier dominates everything below it.
+    //   tenure-first:  TENURE score  >  AGE-BAND preference  >  smaller partner
+    //   ageband-first: AGE-BAND preference  >  TENURE score  >  smaller partner
+    // Property count is NOT part of the score — it's only a final
+    // tiebreaker — so a paired-tenure same-band candidate always beats
+    // a paired-tenure adjacent-band candidate regardless of group size.
+    // (Every candidate has already passed canGroupsMerge, so age-band
+    // adjacency is guaranteed — no need to re-check it here.)
+    const ageFirst = this.prioritise === 'ageband';
+    const W = ageFirst
+      ? { age: 1_000_000, tenure: 10_000 }
+      : { tenure: 1_000_000, age: 10_000 };
+
     const ranked = candidates.map(c => {
-      let score = 0;
-      score += this.getTenureMergeScore(smallGroup.tenure, c.group.tenure) * 1000;
-      if (this.areAgeBandsAdjacent(smallGroup.ageBand, c.group.ageBand)) {
-        score += 100;
-        score += this.getAgeBandPreferenceScore(smallGroup.ageBand, c.group.ageBand) * 10;
-      }
-      score -= c.group.properties * 0.1;
+      const score =
+        this.getTenureMergeScore(smallGroup.tenure, c.group.tenure) * W.tenure +
+        this.getAgeBandPreferenceScore(smallGroup.ageBand, c.group.ageBand) * W.age;
       return { candidate: c, score };
     });
-    ranked.sort((a, b) => b.score - a.score);
+    ranked.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      // Final tiebreaker: prefer the smaller partner.
+      return a.candidate.group.properties - b.candidate.group.properties;
+    });
     return ranked;
   }
 
@@ -2024,6 +2673,7 @@ class V3DataProcessor {
 
   setTenurePairs(pairs) { this.merger.setTenurePairs(pairs); }
   setAllowPrePost2000(flag) { this.merger.setAllowPrePost2000(flag); }
+  setPrioritise(mode) { this.merger.setPrioritise(mode); }
 
   identifySmallGroups(threshold) {
     return this.groups.filter(g => g.properties < threshold);
@@ -2193,6 +2843,10 @@ async function v3HandleFile(file) {
     v3PopulateColumnSelectors();
     setV3Step(2);
   } catch (err) {
+    if (err && err.cancelled) {
+      v3FileInput.value = '';
+      return;
+    }
     alert('Could not read file: ' + err.message);
   }
 }
@@ -2531,6 +3185,11 @@ document.getElementById('v3AllowPrePost2000').addEventListener('change', e => {
 document.getElementById('v3IncludeInclusive').addEventListener('change', e => {
   v3.includeInclusive = !!e.target.checked;
 });
+document.querySelectorAll('input[name="v3Prioritise"]').forEach(r => {
+  r.addEventListener('change', () => {
+    if (r.checked) v3.prioritise = r.value === 'ageband' ? 'ageband' : 'tenure';
+  });
+});
 
 document.getElementById('v3BackToColumns').addEventListener('click', () => setV3Step(2));
 document.getElementById('v3RunBtn').addEventListener('click', v3RunConsolidation);
@@ -2559,6 +3218,7 @@ function v3RunConsolidation() {
   v3.processor = new V3DataProcessor(validRows, v3.assetGroupCol, v3.countCol, v3.ageBandPos, v3.tenurePos);
   v3.processor.setTenurePairs(pairs);
   v3.processor.setAllowPrePost2000(v3.allowPrePost2000);
+  v3.processor.setPrioritise(v3.prioritise);
   v3.stats = v3.processor.applyMerges(v3.threshold, v3.includeInclusive);
 
   const groups = v3.processor.groups;
@@ -2572,12 +3232,23 @@ function v3RunConsolidation() {
   let smallAfter = 0;
   for (const v of mergedTotals.values()) if (v < v3.threshold) smallAfter++;
 
+  let v3Total = 0, v3Large = 0, v3SmallLT5 = 0;
+  for (const c of mergedTotals.values()) {
+    v3Total += c;
+    if (c > 300) v3Large++;
+    if (c < 5) v3SmallLT5++;
+  }
+  const v3Avg = mergedTotals.size ? (v3Total / mergedTotals.size) : 0;
+
   document.getElementById('v3StatGroupsBefore').textContent = groupsBefore.toLocaleString();
   document.getElementById('v3StatGroupsAfter').textContent = uniqueAfter.toLocaleString();
   document.getElementById('v3StatSmallBefore').textContent = smallBefore.toLocaleString();
   document.getElementById('v3StatSmallAfter').textContent = smallAfter.toLocaleString();
   document.getElementById('v3StatMergesThreshold').textContent = v3.stats.smallGroupsMerged.toLocaleString();
   document.getElementById('v3StatMergesInclusive').textContent = v3.stats.inclusiveGroupsMerged.toLocaleString();
+  document.getElementById('v3StatAvgSize').textContent = v3Avg.toFixed(1);
+  document.getElementById('v3StatLargeGroups').textContent = v3Large.toLocaleString();
+  document.getElementById('v3StatSmallLT5').textContent = v3SmallLT5.toLocaleString();
 
   v3RenderMergeTable();
   document.getElementById('v3Results').classList.remove('hidden');
