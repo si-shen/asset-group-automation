@@ -645,21 +645,6 @@
         <table id="v2PivotTable"></table>
       </div>
 
-      <h3 style="margin: 22px 0 8px; font-size:15px; font-weight:600;">Merge mapping (v1 → v2)</h3>
-      <div class="toolbar" style="margin-top: 0; margin-bottom: 12px;">
-        <div class="left">
-          <label style="font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; cursor:pointer;">
-            <input type="checkbox" id="v2ShowAllMappings"> Show unchanged groups too
-          </label>
-        </div>
-        <div class="right">
-          <span id="v2MergeSummary" style="color: var(--muted); font-size: 13px;"></span>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table id="v2MergeTable"></table>
-      </div>
-
       <div class="toolbar">
         <button class="btn" id="v2BackToColumns">← Edit columns</button>
         <div class="right">
@@ -2338,7 +2323,6 @@ function downloadV2AllCsv() {
 /* ====================================================== */
 /* SECTION V2 · STEP 3 · MERGE ASSET GROUPS                */
 /* ====================================================== */
-document.getElementById('v2ShowAllMappings').addEventListener('change', renderV2MergeTable);
 document.getElementById('v2DownloadAllXlsx').addEventListener('click', downloadV2AllXlsx);
 document.getElementById('v2DownloadAllCsv').addEventListener('click', downloadV2AllCsv);
 document.getElementById('v2ContinueToV3').addEventListener('click', v2HandoffToV3);
@@ -2469,7 +2453,7 @@ function v2BuildMerge() {
     return { ...r, [v2Col]: g };
   });
 
-  // 4. Build merge clusters for the mapping table. Different blocks that happen to
+  // 4. Build merge clusters for stats. Different blocks that happen to
   //    share the same set of v1 groups produce the same v2 name (mergeGroupNames is
   //    deterministic), so we dedupe by v2 name and list all source blocks together.
   const v2NameToCluster = new Map();
@@ -2539,7 +2523,6 @@ function v2BuildMerge() {
   document.getElementById('v2StatLargeGroups').textContent = v2Large.toLocaleString();
   document.getElementById('v2StatSmallGroups').textContent = v2Small.toLocaleString();
 
-  renderV2MergeTable();
   v2RenderPivotTable();
   renderV2ExcludedWarn();
 }
@@ -2589,64 +2572,6 @@ function mergeGroupNames(members) {
     out.push(distinct.join(' & '));
   }
   return out.join(' | ');
-}
-
-function renderV2MergeTable() {
-  const showAll = document.getElementById('v2ShowAllMappings').checked;
-
-  // Build the display list. Merged clusters always shown; unchanged v1 groups
-  // appear as single-member pseudo-clusters when the toggle is on.
-  const list = [...v2.clusters];
-  if (showAll && v2.unchangedGroups && v2.unchangedGroups.length) {
-    for (const g of v2.unchangedGroups) {
-      list.push({ v2name: g, members: [g], blocks: [], merged: false, propertyCount: 0 });
-    }
-  }
-
-  const table = document.getElementById('v2MergeTable');
-  let html = '<thead><tr>' +
-    '<th>asset group v1</th>' +
-    '<th>asset group v2</th>' +
-    '<th>source blocks</th>' +
-    '<th style="text-align:right;">properties</th>' +
-    '</tr></thead><tbody>';
-
-  if (!list.length) {
-    html += `<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--muted);">${
-      showAll ? 'No groups to display.' : 'No merges happened — every block has at most one asset group.'
-    }</td></tr>`;
-  } else {
-    for (const cluster of list) {
-      const rowspan = cluster.members.length;
-      const blocksText = cluster.blocks.length
-        ? cluster.blocks.join(', ')
-        : '—';
-      cluster.members.forEach((m, idx) => {
-        html += '<tr>' +
-          `<td>${escapeHtml(m)}</td>` +
-          (idx === 0
-            ? `<td rowspan="${rowspan}" class="${cluster.merged ? 'highlight' : ''}" style="${cluster.merged ? 'font-weight:600;' : ''}">${escapeHtml(cluster.v2name)}</td>`
-            : ''
-          ) +
-          (idx === 0
-            ? `<td rowspan="${rowspan}" style="color:var(--muted); font-size:12px; max-width:260px; white-space:normal;">${escapeHtml(blocksText)}</td>`
-            : ''
-          ) +
-          (idx === 0
-            ? `<td rowspan="${rowspan}" style="text-align:right; font-variant-numeric: tabular-nums;">${
-                cluster.merged ? cluster.propertyCount.toLocaleString() : ''
-              }</td>`
-            : ''
-          ) +
-          '</tr>';
-      });
-    }
-  }
-  html += '</tbody>';
-  table.innerHTML = html;
-
-  document.getElementById('v2MergeSummary').textContent =
-    `${list.length.toLocaleString()} ${showAll ? 'row-group' : 'merged cluster'}${list.length === 1 ? '' : 's'} shown`;
 }
 
 /* ====================================================== */
