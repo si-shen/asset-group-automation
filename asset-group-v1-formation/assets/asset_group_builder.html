@@ -722,14 +722,14 @@
 
         <div class="field-row" style="margin-top: 16px;">
           <div class="field">
-            <label for="v3AgeBandSelect">Age band piece</label>
+            <label for="v3AgeBandSelect">Age Band</label>
             <select id="v3AgeBandSelect"></select>
-            <div class="field-hint">Pick which piece of the asset group name is the age band. Choose "None" if your data has no age band — in that case age-adjacency won't block a merge.</div>
+            <div class="field-hint">Pick which attribute is the age band. Choose "None" if your data has no age band — in that case age-adjacency won't block a merge.</div>
           </div>
           <div class="field">
-            <label for="v3TenureSelect">Tenure piece</label>
+            <label for="v3TenureSelect">Tenure</label>
             <select id="v3TenureSelect"></select>
-            <div class="field-hint">Pick which piece of the asset group name is the tenure (required).</div>
+            <div class="field-hint">Pick which attribute is the tenure (required).</div>
           </div>
         </div>
 
@@ -3219,14 +3219,14 @@ function v3UpdateParsedPreview() {
   noneOpt.value = ''; noneOpt.textContent = 'None (no age band column)';
   ageSel.appendChild(noneOpt);
   const placeTen = document.createElement('option');
-  placeTen.value = ''; placeTen.textContent = '— choose a piece —';
+  placeTen.value = ''; placeTen.textContent = '— choose an attribute —';
   tenSel.appendChild(placeTen);
   firstParts.forEach((p, i) => {
     const o1 = document.createElement('option');
-    o1.value = String(i); o1.textContent = `Piece ${i + 1} · ${p.slice(0, 30) || '(empty)'}`;
+    o1.value = String(i); o1.textContent = `Attribute ${i + 1} · ${p.slice(0, 30) || '(empty)'}`;
     ageSel.appendChild(o1);
     const o2 = document.createElement('option');
-    o2.value = String(i); o2.textContent = `Piece ${i + 1} · ${p.slice(0, 30) || '(empty)'}`;
+    o2.value = String(i); o2.textContent = `Attribute ${i + 1} · ${p.slice(0, 30) || '(empty)'}`;
     tenSel.appendChild(o2);
   });
 
