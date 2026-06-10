@@ -2055,7 +2055,9 @@ function saveWorkbook(wb, filename, bookType) {
   const mime = bookType === 'csv'
     ? 'text/csv;charset=utf-8'
     : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  const out = XLSX.write(wb, { bookType, type: 'array' });
+  const writeOptions = { bookType, type: 'array' };
+  if (bookType !== 'csv') writeOptions.compression = true;
+  const out = XLSX.write(wb, writeOptions);
   const blob = new Blob([out], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
