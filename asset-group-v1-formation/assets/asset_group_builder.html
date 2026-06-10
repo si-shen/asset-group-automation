@@ -1536,7 +1536,7 @@ function v1Download(kind) {
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(v1.outputRows, { header: headers });
       appendSheet(wb, ws, v1.sheetName || 'Sheet1');
-      appendSheet(wb, v1BuildPivotSheet(), 'asset group v1 pivot');
+      appendSheet(wb, v1BuildPivotSheet(), 'Asset group v1 pivot');
       saveWorkbook(wb, `${base} - with asset group v1.xlsx`, 'xlsx');
     } else {
       // CSV is single-sheet; emit rows only.
