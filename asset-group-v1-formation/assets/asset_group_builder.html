@@ -3433,19 +3433,20 @@ function v3BuildAggregateRowsSheet() {
 }
 
 function v3BuildMappingSheet() {
-  const headers = ['asset group v2', 'asset group v3', 'merge type'];
+  const headers = ['asset group v2', 'Properties', 'asset group v3', 'Merge Type'];
   const aoa = [headers];
   const groups = [...v3.processor.groups].sort((a, b) => naturalCompare(a.originalAssetGroup, b.originalAssetGroup));
   for (const g of groups) {
     const merged = g.mergedAssetGroup !== g.originalAssetGroup;
     aoa.push([
       g.originalAssetGroup,
+      g.properties,
       g.mergedAssetGroup,
       merged ? (g.mergeSource || 'merged') : 'unchanged',
     ]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 60 }, { wch: 60 }, { wch: 18 }];
+  ws['!cols'] = [{ wch: 60 }, { wch: 14 }, { wch: 60 }, { wch: 18 }];
   return ws;
 }
 
