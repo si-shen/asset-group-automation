@@ -959,7 +959,7 @@
       <p class="subtitle">Asset group names are ordered attributes separated by <code>|</code>. Pick where the new attribute should be inserted for the large groups.</p>
 
       <div class="selected-preview">
-        <span class="label">Current asset group pieces (first large group):</span>
+        <span class="label">Current asset group attributes (first large group):</span>
         <span id="v4PositionPieces"></span>
       </div>
 
@@ -3764,8 +3764,13 @@ document.getElementById('v4ChangeFile').addEventListener('click', () => {
 
 const v4ThresholdInput = document.getElementById('v4Threshold');
 v4ThresholdInput.addEventListener('input', () => {
-  v4.threshold = Math.max(1, parseInt(v4ThresholdInput.value, 10) || 300);
-  v4ThresholdInput.value = v4.threshold;
+  const raw = String(v4ThresholdInput.value || '').trim();
+  if (raw === '') {
+    v4.threshold = null;
+  } else {
+    const n = parseInt(raw, 10);
+    v4.threshold = Number.isFinite(n) && n >= 1 ? n : null;
+  }
   v4AnalyzeSource();
 });
 
@@ -3918,6 +3923,7 @@ function v4AnalyzeSource() {
   const rows = v4.rows || [];
   const groupCol = v4.groupCol;
   const warn = document.getElementById('v4SourceWarn');
+  const threshold = Number.isFinite(v4.threshold) && v4.threshold >= 1 ? v4.threshold : null;
   v4.groupCounts = new Map();
   v4.largeGroups = new Map();
   v4.largeGroupRows = [];
@@ -3929,7 +3935,7 @@ function v4AnalyzeSource() {
       v4.groupCounts.set(name, (v4.groupCounts.get(name) || 0) + 1);
     }
     for (const [name, n] of v4.groupCounts) {
-      if (n > v4.threshold) v4.largeGroups.set(name, n);
+      if (threshold != null && n > threshold) v4.largeGroups.set(name, n);
     }
     v4.largeGroupRows = rows.filter(r => v4.largeGroups.has(fmtVal(r[groupCol])));
   }
@@ -3957,18 +3963,21 @@ function v4AnalyzeSource() {
   if (!rows.length) {
     warn.textContent = warn.textContent || 'Upload a property-level file, or continue here from a completed V3 run.';
     warn.classList.remove('hidden');
+  } else if (threshold == null) {
+    warn.textContent = 'Enter a large-group threshold before continuing.';
+    warn.classList.remove('hidden');
   } else if (!groupCol) {
     warn.textContent = 'Choose the current asset group column before continuing.';
     warn.classList.remove('hidden');
   } else if (!v4.largeGroups.size) {
-    warn.textContent = `No asset groups are above ${v4.threshold.toLocaleString()} properties. Lower the threshold if you still want to test a V4 split.`;
+    warn.textContent = `No asset groups are above ${threshold.toLocaleString()} properties. Lower the threshold if you still want to test a V4 split.`;
     warn.classList.remove('hidden');
   } else {
     warn.classList.add('hidden');
     warn.textContent = '';
   }
 
-  document.getElementById('v4SourceNext').disabled = !(rows.length && groupCol && v4.largeGroups.size);
+  document.getElementById('v4SourceNext').disabled = !(rows.length && groupCol && threshold != null && v4.largeGroups.size);
 }
 
 /* ---------- optional extra attributes upload ---------- */
@@ -4109,13 +4118,10 @@ function v4BuildAttributeGrid() {
   }
 
   for (const col of attrs) {
-    let sample = '';
     const distinct = new Set();
     for (const r of v4.largeGroupRows) {
       const v = fmtVal(r[col]);
-      if (v && !sample) sample = v;
       if (v) distinct.add(v);
-      if (distinct.size > 200) break;
     }
     const card = document.createElement('div');
     card.className = 'col-card';
@@ -4126,7 +4132,6 @@ function v4BuildAttributeGrid() {
     card.innerHTML = `
       ${uploaded}
       <div class="col-name">${escapeHtml(col)}</div>
-      <div class="col-sample">e.g. ${escapeHtml(sample) || '(empty)'}</div>
       <div class="col-sample">${distinct.size.toLocaleString()} distinct value${distinct.size === 1 ? '' : 's'} in large groups</div>
     `;
     card.addEventListener('click', () => {
@@ -4169,7 +4174,7 @@ function v4BuildPositionUI() {
   pieces.innerHTML = parts.length
     ? parts.map((p, i) =>
         `<span style="display:inline-block; padding:3px 8px; margin:2px 4px 2px 0; border:1px solid var(--border); border-radius:4px; background:white; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:12px;">` +
-        `<span style="color:var(--muted); font-size:10px;">pos ${i + 1}</span> ${escapeHtml(p) || '(empty)'}` +
+        `<span style="color:var(--muted); font-size:10px;">attribute ${i + 1}</span> ${escapeHtml(p) || '(empty)'}` +
         `</span>`
       ).join('')
     : '(no group name available)';
@@ -4179,9 +4184,9 @@ function v4BuildPositionUI() {
   for (let i = 0; i <= parts.length; i++) {
     const o = document.createElement('option');
     o.value = String(i);
-    if (i === 0) o.textContent = parts.length ? `Before piece 1 · ${parts[0] || '(empty)'}` : 'As first piece';
-    else if (i === parts.length) o.textContent = parts.length ? `After final piece · ${parts[i - 1] || '(empty)'}` : 'As final piece';
-    else o.textContent = `After piece ${i} · ${parts[i - 1] || '(empty)'}`;
+    if (i === 0) o.textContent = parts.length ? `Before attribute 1 · ${parts[0] || '(empty)'}` : 'As first attribute';
+    else if (i === parts.length) o.textContent = parts.length ? `After final attribute · ${parts[i - 1] || '(empty)'}` : 'As final attribute';
+    else o.textContent = `After attribute ${i} · ${parts[i - 1] || '(empty)'}`;
     sel.appendChild(o);
   }
   if (v4.insertIndex == null || v4.insertIndex > parts.length) v4.insertIndex = parts.length;
@@ -4389,26 +4394,11 @@ function v4BuildMappingSheet() {
   return ws;
 }
 
-function v4BuildSettingsSheet() {
-  const aoa = [
-    ['setting', 'value'],
-    ['source group column', v4.groupCol || ''],
-    ['large-group threshold', v4.threshold],
-    ['inserted attribute', v4.attributeCol || ''],
-    ['insert position', v4.insertIndex == null ? '' : v4.insertIndex],
-    ['extra attribute file', v4.uploadedFileName || ''],
-  ];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 28 }, { wch: 60 }];
-  return ws;
-}
-
 function appendV4WorkbookSheets(wb) {
   appendSheet(wb, v4BuildRowsSheet(), v4.sheetName || 'Properties');
   appendWorkbookSheets(wb, v4.priorSheets || []);
   appendSheet(wb, v4BuildPivotSheet(), 'Asset group v4 pivot');
   appendSheet(wb, v4BuildMappingSheet(), 'v3 to v4 mapping');
-  appendSheet(wb, v4BuildSettingsSheet(), 'v4 settings');
 }
 
 function downloadV4Xlsx() {
