@@ -919,6 +919,7 @@ const v3 = {
   headers: [],
   rows: [],
   fileName: '',
+  priorSheets: [],          // workbook sheets carried forward from the previous step
   assetGroupCol: null,
   countCol: null,
   // Property-level snapshot (when available): rows + headers from BEFORE
@@ -2009,6 +2010,15 @@ function v2BuildGroupPivotSheet() {
   return ws;
 }
 
+function v2BuildWorkbookSheets() {
+  return [
+    { sheet: v2BuildRowsSheet(),       name: v2.sheetName || 'Properties' },
+    { sheet: v2BuildPivotSheet(),      name: 'Pivot Table 1' },
+    { sheet: v2BuildGroupPivotSheet(), name: 'asset group v2 pivot' },
+    { sheet: v2BuildMappingSheet(),    name: 'v1 to v2 mapping' },
+  ];
+}
+
 /* ---------- Excel sheet-name sanitizer ----------
    Excel sheet names must be 1-31 chars, can't contain : \ / ? * [ ],
    can't start/end with an apostrophe, and 'History' is reserved. */
@@ -2034,6 +2044,9 @@ function uniqueSheetName(wb, desired) {
 function appendSheet(wb, ws, name) {
   const safe = uniqueSheetName(wb, sanitizeSheetName(name, 'Sheet'));
   XLSX.utils.book_append_sheet(wb, ws, safe);
+}
+function appendWorkbookSheets(wb, sheets) {
+  for (const item of sheets || []) appendSheet(wb, item.sheet, item.name);
 }
 
 /* Robust blob-based download (works inside sandboxed iframes where
@@ -2062,10 +2075,7 @@ function downloadV2AllXlsx() {
       return;
     }
     const wb = XLSX.utils.book_new();
-    appendSheet(wb, v2BuildRowsSheet(),       v2.sheetName || 'Properties');
-    appendSheet(wb, v2BuildPivotSheet(),      'Pivot Table 1');
-    appendSheet(wb, v2BuildGroupPivotSheet(), 'asset group v2 pivot');
-    appendSheet(wb, v2BuildMappingSheet(),    'v1 to v2 mapping');
+    appendWorkbookSheets(wb, v2BuildWorkbookSheets());
 
     const base = (v2.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
     saveWorkbook(wb, `${base} - asset group v2.xlsx`, 'xlsx');
@@ -2137,6 +2147,7 @@ function v2HandoffToV3() {
   v3.workbook = null;
   v3.sheetName = 'from V2';
   v3.fileName = v2.fileName || 'asset-groups';
+  v3.priorSheets = v2BuildWorkbookSheets();
   v3.headers = [assetCol, countCol];
   v3.rows = rows;
   v3.assetGroupCol = assetCol;
@@ -2830,6 +2841,7 @@ v3FileInput.addEventListener('change', e => {
 });
 document.getElementById('v3ChangeFile').addEventListener('click', () => {
   v3.workbook = null;
+  v3.priorSheets = [];
   document.getElementById('v3FileInfo').classList.add('hidden');
   document.getElementById('v3DropZone').classList.remove('hidden');
   v3FileInput.value = '';
@@ -2842,6 +2854,7 @@ async function v3HandleFile(file) {
     const { workbook, sheetName, headers, rows } = await readWorkbook(file);
     v3.workbook = workbook;
     v3.sheetName = sheetName;
+    v3.priorSheets = [];
     v3.headers = headers;
     v3.rows = rows;
 
@@ -3410,10 +3423,11 @@ function downloadV3Xlsx() {
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = header.map(h => ({ wch: Math.max(16, h.length + 2) }));
     const wb = XLSX.utils.book_new();
+    appendWorkbookSheets(wb, v3.priorSheets);
     // If we have the property-level rows, emit them first as the most
     // useful artifact: original rows with asset group v3 added next to v2.
     const propWs = v3BuildPropertyRowsSheet();
-    if (propWs) appendSheet(wb, propWs, 'Properties');
+    if (propWs) appendSheet(wb, propWs, v3.priorSheets.length ? 'Properties with v3' : 'Properties');
     appendSheet(wb, ws, 'Consolidated');
     appendSheet(wb, v3BuildPivotSheet(), 'asset group v3 pivot');
     const base = (v3.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
