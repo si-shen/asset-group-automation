@@ -1981,16 +1981,38 @@ function v2BuildPivotSheet() {
   ];
   return ws;
 }
+function v2BuildV1PivotSheet() {
+  const groupCol = v2.assetGroupCol || 'asset group v1';
+  const counts = new Map();
+  for (const r of v2.mergedRows) {
+    const v = fmtVal(r[groupCol]);
+    if (!v) continue;
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => naturalCompare(a[0], b[0]));
+  const aoa = [['asset group v1', 'count of properties']];
+  for (const [name, n] of sorted) aoa.push([name, n]);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 50 }, { wch: 22 }];
+  return ws;
+}
 function v2BuildMappingSheet() {
-  const headers = ['asset group v1', 'asset group v2', 'merged?', 'properties'];
+  const blockCol = v2.blockRefCol || 'block reference';
+  const groupCol = v2.assetGroupCol || 'asset group v1';
+  const headers = [blockCol, groupCol, 'asset group v2', 'count of properties', 'merged?'];
   const aoa = [headers];
-  for (const c of v2.clusters) {
-    for (const m of c.members) {
-      aoa.push([m, c.v2name, c.merged ? 'yes' : 'no', c.merged ? c.propertyCount : '']);
-    }
+  for (const row of v2.pivotRows) {
+    const v2name = v2.blockToV2.get(row.block) || row.group;
+    aoa.push([row.block, row.group, v2name, row.count, v2name !== row.group ? 'yes' : 'no']);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 50 }, { wch: 60 }, { wch: 10 }, { wch: 14 }];
+  ws['!cols'] = [
+    { wch: Math.max(18, blockCol.length + 2) },
+    { wch: 40 },
+    { wch: 50 },
+    { wch: 22 },
+    { wch: 10 },
+  ];
   return ws;
 }
 
@@ -2013,8 +2035,8 @@ function v2BuildGroupPivotSheet() {
 function v2BuildWorkbookSheets() {
   return [
     { sheet: v2BuildRowsSheet(),       name: v2.sheetName || 'Properties' },
-    { sheet: v2BuildPivotSheet(),      name: 'Pivot Table 1' },
-    { sheet: v2BuildGroupPivotSheet(), name: 'asset group v2 pivot' },
+    { sheet: v2BuildV1PivotSheet(),    name: 'Asset group v1 pivot' },
+    { sheet: v2BuildGroupPivotSheet(), name: 'Asset group v2 pivot' },
     { sheet: v2BuildMappingSheet(),    name: 'v1 to v2 mapping' },
   ];
 }
@@ -2099,7 +2121,7 @@ function downloadV2AllCsv() {
     // Each CSV is its own one-sheet workbook so XLSX.writeFile can emit it.
     const files = [
       { sheet: v2BuildRowsSheet(),       name: `${base} - rows.csv` },
-      { sheet: v2BuildPivotSheet(),      name: `${base} - pivot.csv` },
+      { sheet: v2BuildV1PivotSheet(),    name: `${base} - asset group v1 pivot.csv` },
       { sheet: v2BuildGroupPivotSheet(), name: `${base} - asset group v2 pivot.csv` },
       { sheet: v2BuildMappingSheet(),    name: `${base} - mapping.csv` },
     ];
