@@ -84,13 +84,15 @@
 
   .steps {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 24px;
     padding: 0;
     list-style: none;
   }
   .step {
-    flex: 1;
+    flex: 1 1 160px;
+    min-width: 0;
     padding: 12px 14px;
     background: var(--panel);
     border: 1px solid var(--border);
@@ -106,6 +108,7 @@
   .step.done { border-color: var(--success); color: var(--success); background: var(--success-soft); }
   .step-num {
     width: 22px; height: 22px;
+    flex: 0 0 22px;
     border-radius: 50%;
     background: var(--border);
     display: inline-flex;
@@ -842,15 +845,16 @@
     </div>
 
     <ol class="steps" id="v4Steps">
-      <li class="step active" data-step="1"><span class="step-num">1</span>Source &amp; threshold</li>
-      <li class="step" data-step="2"><span class="step-num">2</span>Choose attribute</li>
-      <li class="step" data-step="3"><span class="step-num">3</span>Insert position</li>
-      <li class="step" data-step="4"><span class="step-num">4</span>Preview &amp; export</li>
+      <li class="step active" data-step="1"><span class="step-num">1</span>Threshold</li>
+      <li class="step" data-step="2"><span class="step-num">2</span>Current asset group</li>
+      <li class="step" data-step="3"><span class="step-num">3</span>Choose attribute</li>
+      <li class="step" data-step="4"><span class="step-num">4</span>Insert position</li>
+      <li class="step" data-step="5"><span class="step-num">5</span>Preview &amp; export</li>
     </ol>
 
     <!-- V4 STEP 1: SOURCE + THRESHOLD -->
     <section class="panel" id="v4PanelSource">
-      <h2>Step 1 · Review large asset groups</h2>
+      <h2>Step 1 · Set large-group threshold</h2>
       <p class="subtitle">Use the V3 property-level output, or upload a property-level file that already contains an asset group column. Groups with more properties than the threshold are eligible for V4 splitting.</p>
 
       <div class="drop-zone" id="v4DropZone">
@@ -871,14 +875,30 @@
 
       <div class="field-row" style="margin-top: 18px;">
         <div class="field">
-          <label for="v4GroupSelect">Current asset group column</label>
-          <select id="v4GroupSelect"></select>
-          <div class="field-hint" id="v4GroupSample"></div>
-        </div>
-        <div class="field">
           <label for="v4Threshold">Large-group threshold</label>
           <input type="number" id="v4Threshold" min="1" step="1" value="300">
           <div class="field-hint">Groups with more than this many properties will be split.</div>
+        </div>
+      </div>
+
+      <div id="v4ThresholdWarn" class="hidden" style="margin-top:12px; padding:12px 14px; border:1px solid #f0c674; background:#fff8e6; border-radius:8px; font-size:13px; color:#6b4f00; line-height:1.55;"></div>
+
+      <div class="toolbar">
+        <button class="btn" id="v4BackToV3">← Back to V3</button>
+        <button class="btn btn-primary" id="v4ThresholdNext" disabled>Select current asset group column →</button>
+      </div>
+    </section>
+
+    <!-- V4 STEP 2: CURRENT ASSET GROUP COLUMN -->
+    <section class="panel hidden" id="v4PanelGroup">
+      <h2>Step 2 · Select current asset group column</h2>
+      <p class="subtitle">Confirm which column contains the current asset group names.</p>
+
+      <div class="field-row" style="margin-top: 18px;">
+        <div class="field">
+          <label for="v4GroupSelect">Current asset group column</label>
+          <select id="v4GroupSelect"></select>
+          <div class="field-hint" id="v4GroupSample"></div>
         </div>
       </div>
 
@@ -892,14 +912,14 @@
       <div id="v4SourceWarn" class="hidden" style="margin-top:12px; padding:12px 14px; border:1px solid #f0c674; background:#fff8e6; border-radius:8px; font-size:13px; color:#6b4f00; line-height:1.55;"></div>
 
       <div class="toolbar">
-        <button class="btn" id="v4BackToV3">← Back to V3</button>
+        <button class="btn" id="v4GroupBack">← Back</button>
         <button class="btn btn-primary" id="v4SourceNext" disabled>Choose split attribute →</button>
       </div>
     </section>
 
-    <!-- V4 STEP 2: ATTRIBUTE SOURCE + SELECTION -->
+    <!-- V4 STEP 3: ATTRIBUTE SOURCE + SELECTION -->
     <section class="panel hidden" id="v4PanelAttribute">
-      <h2>Step 2 · Choose one attribute to split the large groups</h2>
+      <h2>Step 3 · Choose one attribute to split the large groups</h2>
       <p class="subtitle">Pick an existing property attribute, or add attributes from a file with the same property rows in the same order. Only groups over the threshold are split; all other groups keep their V3 name unchanged.</p>
 
       <div class="drop-zone" id="v4AttrDropZone" style="padding:24px;">
@@ -938,9 +958,9 @@
       </div>
     </section>
 
-    <!-- V4 STEP 3: INSERT POSITION -->
+    <!-- V4 STEP 4: INSERT POSITION -->
     <section class="panel hidden" id="v4PanelPosition">
-      <h2>Step 3 · Choose where the new attribute sits</h2>
+      <h2>Step 4 · Choose where the new attribute sits</h2>
       <p class="subtitle">Asset group names are ordered attributes separated by <code>|</code>. Pick where the new attribute should be inserted for the large groups.</p>
 
       <div class="selected-preview">
@@ -972,9 +992,9 @@
       </div>
     </section>
 
-    <!-- V4 STEP 4: PREVIEW + EXPORT -->
+    <!-- V4 STEP 5: PREVIEW + EXPORT -->
     <section class="panel hidden" id="v4PanelExport">
-      <h2>Step 4 · Preview &amp; export</h2>
+      <h2>Step 5 · Preview &amp; export</h2>
       <p class="subtitle">The new <strong>asset group v4</strong> column is added after the current asset group column. Only over-threshold V3 groups receive the extra attribute.</p>
 
       <div class="stats-row">
@@ -1173,9 +1193,10 @@ const setV3Step = (n) => setStep(v3StepsEl, v3Panels, n);
 const v4StepsEl = document.getElementById('v4Steps');
 const v4Panels = [
   ['v4PanelSource', 1],
-  ['v4PanelAttribute', 2],
-  ['v4PanelPosition', 3],
-  ['v4PanelExport', 4],
+  ['v4PanelGroup', 2],
+  ['v4PanelAttribute', 3],
+  ['v4PanelPosition', 4],
+  ['v4PanelExport', 5],
 ];
 const setV4Step = (n) => setStep(v4StepsEl, v4Panels, n);
 
@@ -3704,9 +3725,11 @@ document.getElementById('v4GroupSelect').addEventListener('change', e => {
   v4AnalyzeSource();
 });
 document.getElementById('v4BackToV3').addEventListener('click', () => setSection('v3'));
+document.getElementById('v4ThresholdNext').addEventListener('click', () => setV4Step(2));
+document.getElementById('v4GroupBack').addEventListener('click', () => setV4Step(1));
 document.getElementById('v4SourceNext').addEventListener('click', () => {
   v4BuildAttributeGrid();
-  setV4Step(2);
+  setV4Step(3);
 });
 
 async function v4HandleFile(file) {
@@ -3764,14 +3787,17 @@ function v4ShowEmptySource(message) {
   notice.classList.add('hidden');
   notice.textContent = '';
   v4PopulateGroupSelector();
-  const warn = document.getElementById('v4SourceWarn');
+  const thresholdWarn = document.getElementById('v4ThresholdWarn');
   if (message) {
-    warn.textContent = message;
-    warn.classList.remove('hidden');
+    thresholdWarn.textContent = message;
+    thresholdWarn.classList.remove('hidden');
   } else {
-    warn.classList.add('hidden');
-    warn.textContent = '';
+    thresholdWarn.classList.add('hidden');
+    thresholdWarn.textContent = '';
   }
+  const warn = document.getElementById('v4SourceWarn');
+  warn.classList.add('hidden');
+  warn.textContent = '';
   v4AnalyzeSource();
 }
 
@@ -3847,7 +3873,8 @@ function v4PopulateGroupSelector() {
 function v4AnalyzeSource() {
   const rows = v4.rows || [];
   const groupCol = v4.groupCol;
-  const warn = document.getElementById('v4SourceWarn');
+  const thresholdWarn = document.getElementById('v4ThresholdWarn');
+  const groupWarn = document.getElementById('v4SourceWarn');
   const threshold = Number.isFinite(v4.threshold) && v4.threshold >= 1 ? v4.threshold : null;
   v4.groupCounts = new Map();
   v4.largeGroups = new Map();
@@ -3886,22 +3913,31 @@ function v4AnalyzeSource() {
   }
 
   if (!rows.length) {
-    warn.textContent = warn.textContent || 'Upload a property-level file, or continue here from a completed V3 run.';
-    warn.classList.remove('hidden');
+    thresholdWarn.textContent = thresholdWarn.textContent || 'Upload a property-level file, or continue here from a completed V3 run.';
+    thresholdWarn.classList.remove('hidden');
   } else if (threshold == null) {
-    warn.textContent = 'Enter a large-group threshold before continuing.';
-    warn.classList.remove('hidden');
-  } else if (!groupCol) {
-    warn.textContent = 'Choose the current asset group column before continuing.';
-    warn.classList.remove('hidden');
-  } else if (!v4.largeGroups.size) {
-    warn.textContent = `No asset groups are above ${threshold.toLocaleString()} properties. Lower the threshold if you still want to test a V4 split.`;
-    warn.classList.remove('hidden');
+    thresholdWarn.textContent = 'Enter a large-group threshold before continuing.';
+    thresholdWarn.classList.remove('hidden');
   } else {
-    warn.classList.add('hidden');
-    warn.textContent = '';
+    thresholdWarn.classList.add('hidden');
+    thresholdWarn.textContent = '';
   }
 
+  if (!rows.length || threshold == null) {
+    groupWarn.classList.add('hidden');
+    groupWarn.textContent = '';
+  } else if (!groupCol) {
+    groupWarn.textContent = 'Choose the current asset group column before continuing.';
+    groupWarn.classList.remove('hidden');
+  } else if (!v4.largeGroups.size) {
+    groupWarn.textContent = `No asset groups are above ${threshold.toLocaleString()} properties. Lower the threshold if you still want to test a V4 split.`;
+    groupWarn.classList.remove('hidden');
+  } else {
+    groupWarn.classList.add('hidden');
+    groupWarn.textContent = '';
+  }
+
+  document.getElementById('v4ThresholdNext').disabled = !(rows.length && threshold != null);
   document.getElementById('v4SourceNext').disabled = !(rows.length && groupCol && threshold != null && v4.largeGroups.size);
 }
 
@@ -4013,10 +4049,10 @@ function v4UniqueHeader(existing, preferred) {
 }
 
 /* ---------- attribute selection ---------- */
-document.getElementById('v4AttrBack').addEventListener('click', () => setV4Step(1));
+document.getElementById('v4AttrBack').addEventListener('click', () => setV4Step(2));
 document.getElementById('v4AttrNext').addEventListener('click', () => {
   v4BuildPositionUI();
-  setV4Step(3);
+  setV4Step(4);
 });
 
 function v4EligibleAttributeHeaders() {
@@ -4085,7 +4121,7 @@ function v4UpdateAttributeSelectionUI() {
 }
 
 /* ---------- insertion position ---------- */
-document.getElementById('v4PositionBack').addEventListener('click', () => setV4Step(2));
+document.getElementById('v4PositionBack').addEventListener('click', () => setV4Step(3));
 document.getElementById('v4GenerateBtn').addEventListener('click', v4GenerateGroups);
 document.getElementById('v4InsertPosition').addEventListener('change', e => {
   v4.insertIndex = parseInt(e.target.value, 10);
@@ -4177,7 +4213,7 @@ function v4BuildNameWithInsertedAttribute(groupName, attrValue, insertIndex) {
 }
 
 /* ---------- generate + render ---------- */
-document.getElementById('v4BackToPosition').addEventListener('click', () => setV4Step(3));
+document.getElementById('v4BackToPosition').addEventListener('click', () => setV4Step(4));
 document.getElementById('v4DownloadXlsx').addEventListener('click', downloadV4Xlsx);
 
 function v4GenerateGroups() {
@@ -4236,7 +4272,7 @@ function v4GenerateGroups() {
   document.getElementById('v4StatRemainingLarge').textContent = remainingLarge.toLocaleString();
 
   v4RenderPreviewTable();
-  setV4Step(4);
+  setV4Step(5);
 }
 
 function v4RenderPreviewTable() {
