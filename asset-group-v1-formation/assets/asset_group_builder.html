@@ -3375,6 +3375,14 @@ function v3BuildPivotSheet() {
   return ws;
 }
 
+function v3BuildGroupLookup() {
+  const lookup = new Map();
+  for (const g of v3.processor.groups) {
+    lookup.set(g.originalAssetGroup, g.mergedAssetGroup);
+  }
+  return lookup;
+}
+
 /* Property-level sheet: each original row + an `asset group v3` column
    inserted right after the link column (typically `asset group v2`).
    Returns null if no property-level data is available (e.g. user uploaded
@@ -3383,11 +3391,7 @@ function v3BuildPropertyRowsSheet() {
   if (!v3.propertyRows || !v3.propertyRows.length || !v3.linkColumn) return null;
   const v3Col = 'asset group v3';
 
-  // originalAssetGroup → mergedAssetGroup. Built once.
-  const lookup = new Map();
-  for (const g of v3.processor.groups) {
-    lookup.set(g.originalAssetGroup, g.mergedAssetGroup);
-  }
+  const lookup = v3BuildGroupLookup();
 
   // Insert v3 column right after the link column; if the link col isn't
   // in headers (shouldn't happen, but defensive), append at the end.
@@ -3408,52 +3412,65 @@ function v3BuildPropertyRowsSheet() {
   return ws;
 }
 
+function v3BuildAggregateRowsSheet() {
+  if (!v3.rows || !v3.rows.length || !v3.assetGroupCol) return null;
+  const v3Col = 'asset group v3';
+  const lookup = v3BuildGroupLookup();
+  const headers = v3.headers.filter(h => h !== v3Col);
+  const linkIdx = headers.indexOf(v3.assetGroupCol);
+  if (linkIdx === -1) headers.push(v3Col);
+  else headers.splice(linkIdx + 1, 0, v3Col);
+
+  const aoa = [headers];
+  for (const r of v3.rows) {
+    const linkVal = fmtVal(r[v3.assetGroupCol]);
+    const v3Val = lookup.get(linkVal) || linkVal;
+    aoa.push(headers.map(h => h === v3Col ? v3Val : (r[h] ?? '')));
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(16, h.length + 2) }));
+  return ws;
+}
+
+function v3BuildMappingSheet() {
+  const headers = ['asset group v2', 'asset group v3', 'merge type'];
+  const aoa = [headers];
+  const groups = [...v3.processor.groups].sort((a, b) => naturalCompare(a.originalAssetGroup, b.originalAssetGroup));
+  for (const g of groups) {
+    const merged = g.mergedAssetGroup !== g.originalAssetGroup;
+    aoa.push([
+      g.originalAssetGroup,
+      g.mergedAssetGroup,
+      merged ? (g.mergeSource || 'merged') : 'unchanged',
+    ]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 60 }, { wch: 60 }, { wch: 18 }];
+  return ws;
+}
+
+function appendV3WorkbookSheets(wb) {
+  const priorSheets = v3.priorSheets || [];
+  const originalSheet = v3BuildPropertyRowsSheet() || v3BuildAggregateRowsSheet();
+  const originalName = priorSheets[0]?.name || v3.sheetName || 'Properties';
+  if (originalSheet) appendSheet(wb, originalSheet, originalName);
+  else if (priorSheets[0]) appendSheet(wb, priorSheets[0].sheet, priorSheets[0].name);
+
+  const priorAdditional = priorSheets.slice(1);
+  appendWorkbookSheets(wb, priorAdditional.filter(item => !/mapping/i.test(item.name)));
+  appendSheet(wb, v3BuildPivotSheet(), 'Asset group v3 pivot');
+  appendWorkbookSheets(wb, priorAdditional.filter(item => /mapping/i.test(item.name)));
+  appendSheet(wb, v3BuildMappingSheet(), 'v2 to v3 mapping');
+}
+
 function downloadV3Xlsx() {
   try {
     if (!v3.processor || !v3.processor.groups || !v3.processor.groups.length) {
       alert('Nothing to export yet — please run consolidation first.');
       return;
     }
-    const groups = v3.processor.groups;
-    const ageBandPos = v3.processor.ageBandPos;
-    const tenurePos = v3.processor.tenurePos;
-    const parsedLen = groups[0] ? groups[0].parts.length : 0;
-    const attributePositions = [];
-    for (let i = 0; i < parsedLen; i++) {
-      if (i === ageBandPos) continue;
-      if (i === tenurePos) continue;
-      attributePositions.push(i);
-    }
-
-    const header = ['Original Asset Group', 'Properties', 'Merged Asset Group', 'Merge Type'];
-    if (ageBandPos != null) header.push('Age Band');
-    attributePositions.forEach(p => header.push(`Attribute ${p + 1}`));
-    header.push('Tenure');
-
-    const aoa = [header];
-    for (const g of groups) {
-      const merged = g.mergedAssetGroup !== g.originalAssetGroup;
-      const row = [
-        g.originalAssetGroup,
-        g.properties,
-        merged ? g.mergedAssetGroup : '',
-        merged ? (g.mergeSource || '') : '',
-      ];
-      if (ageBandPos != null) row.push(g.ageBand);
-      attributePositions.forEach(p => row.push(g.parts[p] ?? ''));
-      row.push(g.tenure);
-      aoa.push(row);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = header.map(h => ({ wch: Math.max(16, h.length + 2) }));
     const wb = XLSX.utils.book_new();
-    appendWorkbookSheets(wb, v3.priorSheets);
-    // If we have the property-level rows, emit them first as the most
-    // useful artifact: original rows with asset group v3 added next to v2.
-    const propWs = v3BuildPropertyRowsSheet();
-    if (propWs) appendSheet(wb, propWs, v3.priorSheets.length ? 'Properties with v3' : 'Properties');
-    appendSheet(wb, ws, 'Consolidated');
-    appendSheet(wb, v3BuildPivotSheet(), 'asset group v3 pivot');
+    appendV3WorkbookSheets(wb);
     const base = (v3.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
     saveWorkbook(wb, `${base} - asset group v3.xlsx`, 'xlsx');
   } catch (err) {
