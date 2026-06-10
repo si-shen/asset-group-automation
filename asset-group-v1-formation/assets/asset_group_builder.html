@@ -416,7 +416,7 @@
 
   <header>
     <h1>Asset Group Builder</h1>
-    <p>Build asset groups from a property spreadsheet, then refine them by merging, consolidating, and splitting large groups.</p>
+    <p>All processing happens locally in your browser.</p>
   </header>
 
   <!-- SECTION TABS -->
@@ -446,7 +446,7 @@
     <!-- V1 STEP 1: UPLOAD -->
     <section class="panel" id="v1PanelUpload">
       <h2>Step 1 · Upload your spreadsheet</h2>
-      <p class="subtitle">Drop the Excel file that contains your property list, or click to browse. All processing happens locally in your browser.</p>
+      <p class="subtitle">Drop the Excel file that contains your properties</p>
 
       <div class="drop-zone" id="v1DropZone">
         <p><strong>Drop .xlsx file here</strong> or click to browse</p>
@@ -466,7 +466,7 @@
     <!-- V1 STEP 2: FILTER IN/OUT -->
     <section class="panel hidden" id="v1PanelFilter">
       <h2>Step 2 · Filter properties (In/Out)</h2>
-      <p class="subtitle">Asset groups are only built for properties marked <strong>In</strong>. Confirm the In/Out column below — we auto-detect when we can. If your sheet doesn't have one, choose <em>(none — keep all rows)</em>.</p>
+      <p class="subtitle">Asset groups are only built for properties marked <strong>In</strong>.<br>Confirm the In/Out column below.</p>
 
       <div class="field-row">
         <div class="field">
@@ -492,7 +492,6 @@
     <!-- V1 STEP 3: SELECT COLUMNS -->
     <section class="panel hidden" id="v1PanelSelect">
       <h2>Step 3 · Select attributes for the asset group</h2>
-      <p class="subtitle">Click each column you want included. The number on each chip shows the order it will appear in the concatenated asset group name.</p>
 
       <div class="toolbar" style="margin-top: 0; margin-bottom: 8px;">
         <div class="left">
@@ -586,7 +585,7 @@
     <!-- V2 STEP 2: IDENTIFY COLUMNS -->
     <section class="panel hidden" id="v2PanelColumns">
       <h2>Step 2 · Identify columns</h2>
-      <p class="subtitle">Pick the column that holds your <strong>block reference</strong>, and confirm which column holds <strong>asset group v1</strong>. We auto-detect when we can — please double-check.</p>
+      <p class="subtitle">Pick the column that holds your <strong>block reference</strong>, and confirm which column holds <strong>asset group v1</strong>.</p>
 
       <div class="field-row">
         <div class="field">
@@ -603,7 +602,7 @@
 
       <div id="v2ExclusionPanel" class="hidden" style="margin-top:18px; padding:16px 18px; border:1px solid var(--border); border-radius:8px; background:#fafbfc;">
         <h3 style="margin:0 0 4px; font-size:15px; font-weight:600;">Exclude block values from merging?</h3>
-        <p class="subtitle" style="margin:0 0 12px;" id="v2ExclusionSubtitle">Pick any block-reference value that's a placeholder rather than a real block. Properties with a ticked value will keep their <strong>asset group v1</strong> unchanged in v2 instead of being merged together.</p>
+        <p class="subtitle" style="margin:0 0 12px;" id="v2ExclusionSubtitle">Pick any block-reference value that's a placeholder rather than a real block.</p>
         <div class="table-wrap" style="max-height:320px;">
           <table id="v2ExclusionTable" style="font-size:13px;"></table>
         </div>
@@ -626,7 +625,6 @@
     <!-- V2 STEP 3: PIVOT + MERGE -->
     <section class="panel hidden" id="v2PanelMerge">
       <h2>Step 3 · Pivot &amp; merge asset groups</h2>
-      <p class="subtitle">When a non-empty, non-zero block reference contains more than one asset group, those groups merge into a single <strong>asset group v2</strong> — but the merge happens <strong>block by block</strong>. If A &amp; B share block X and B &amp; C share block Y, you get two independent merges (A+B for block X, B+C for block Y); they do not combine into A+B+C. Attributes are compared position-by-position: matching values stay, different values are joined with <code>&amp;</code>. The asset group v2 is added to both the pivot table and the original property rows.</p>
 
       <div id="v2ExcludedWarn" class="hidden" style="margin-bottom:16px; padding:12px 14px; border:1px solid #f0c674; background:#fff8e6; border-radius:8px; font-size:13px; color:#6b4f00; line-height:1.55;"></div>
 
@@ -670,7 +668,6 @@
           <button class="btn btn-primary" id="v2ContinueToV3">Continue to V3 →</button>
         </div>
       </div>
-      <p class="subtitle" style="margin: 8px 0 0; text-align:right; font-size:12px;">.xlsx = one workbook with four sheets (rows, block × group pivot, asset group v2 pivot, mapping). .csv = four separate files.</p>
     </section>
   </div>
 
@@ -712,7 +709,7 @@
     <!-- V3 STEP 2: IDENTIFY COLUMNS -->
     <section class="panel hidden" id="v3PanelColumns">
       <h2>Step 2 · Identify columns</h2>
-      <p class="subtitle">Pick the <strong>asset group</strong> column and the <strong>property count</strong> column. We'll split the asset group name by <code>|</code>, then ask which piece is the <strong>age band</strong> and which is the <strong>tenure</strong> — those two positions drive the merge logic.</p>
+      <p class="subtitle">Pick the <strong>asset group</strong> column and the <strong>property count</strong> column.</p>
 
       <div id="v3AggregateNotice" class="hidden" style="margin-bottom:16px; padding:12px 14px; border:1px solid #a3d9b5; background:#e6f7ef; border-radius:8px; font-size:13px; color:#0a5a3c; line-height:1.55;">
         <strong>Auto-aggregated.</strong>
@@ -763,7 +760,6 @@
     <!-- V3 STEP 3: CONFIGURE + CONSOLIDATE -->
     <section class="panel hidden" id="v3PanelConsolidate">
       <h2>Step 3 · Configure &amp; consolidate</h2>
-      <p class="subtitle">Set the small-group threshold, declare which tenures can combine, then run consolidation.</p>
 
       <div style="margin-bottom: 22px;">
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">
@@ -775,7 +771,7 @@
 
       <div style="margin-bottom: 22px;">
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Merge priority</label>
-        <div class="field-hint" style="margin-bottom: 10px;">When a small group has multiple valid merge partners, which factor ranks candidates first? Both factors must pass the merge rules either way — this only changes which one wins when more than one candidate is valid.</div>
+        <div class="field-hint" style="margin-bottom: 10px;">When a small group has multiple valid merge partners, choose which factor ranks candidates first.</div>
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
           <input type="radio" name="v3Prioritise" value="tenure" checked style="margin-top:3px;">
           <span><strong>Tenure first</strong> (default) — prefer same/inclusive/paired tenure; use age band as tiebreaker.</span>
@@ -788,7 +784,7 @@
 
       <div style="margin-bottom: 22px;">
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Mergeable tenure pairs</label>
-        <div class="field-hint" style="margin-bottom: 10px;">Pairs of tenure types that your organisation allows to combine (for example <code>AR</code> with <code>GN</code>). A small group is only merged with a partner whose tenure matches exactly, is inclusive (e.g. <code>GN &amp; AR</code> includes <code>GN</code>), or appears in one of the pairs you list here.</div>
+        <div class="field-hint" style="margin-bottom: 10px;">Pairs of tenure types that your organisation allows to combine (for example <code>AR</code> with <code>GN</code>).</div>
         <div id="v3TenurePairs"></div>
         <button class="btn" id="v3AddTenurePair" style="margin-top: 8px;">+ Add pair</button>
       </div>
@@ -1332,7 +1328,6 @@ function pickHeaderRow(aoa, defaultIndex, fileName, sheetName) {
     let selectedIndex = defaultIndex;
 
     subtitle.innerHTML =
-      `<strong>${escapeHtml(fileName)}</strong> &middot; sheet "${escapeHtml(sheetName)}". ` +
       `Select the row that contains the column names. ` +
       `We've pre-selected <strong>row ${defaultIndex + 1}</strong> as our best guess.`;
 
@@ -2003,12 +1998,7 @@ function v2RenderExclusionTable() {
   }
 
   subtitleEl.innerHTML =
-    `Pick any block-reference value that's a placeholder rather than a real block. ` +
-    `Properties with a ticked value will keep their <strong>asset group v1</strong> unchanged in v2 ` +
-    `instead of being merged together. ` +
-    (totalUnique > V2_EXCLUSION_TOP_N
-      ? `Showing the top ${V2_EXCLUSION_TOP_N} most frequent of <strong>${totalUnique.toLocaleString()}</strong> values.`
-      : `<strong>${totalUnique.toLocaleString()}</strong> distinct values total.`);
+    `Pick any block-reference value that's a placeholder rather than a real block.`;
 
   const ticked = v2.excludedBlockValues.size;
   let excludedRows = 0;
