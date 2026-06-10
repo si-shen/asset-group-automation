@@ -296,7 +296,8 @@
     font-weight:600;
     margin-bottom:6px;
   }
-  .field select {
+  .field select,
+  .field input[type="number"] {
     width:100%;
     padding:10px 12px;
     border:1px solid var(--border);
@@ -415,7 +416,7 @@
 
   <header>
     <h1>Asset Group Builder</h1>
-    <p>Build asset groups from a property spreadsheet, then refine them by merging across split blocks.</p>
+    <p>Build asset groups from a property spreadsheet, then refine them by merging, consolidating, and splitting large groups.</p>
   </header>
 
   <!-- SECTION TABS -->
@@ -423,6 +424,7 @@
     <button class="section-tab active" data-section="v1"><span class="tab-num">1</span>Asset group V1 formation</button>
     <button class="section-tab" data-section="v2"><span class="tab-num">2</span>Asset group V2 — merge split blocks</button>
     <button class="section-tab" data-section="v3"><span class="tab-num">3</span>Asset group V3 — merge small groups</button>
+    <button class="section-tab" data-section="v4"><span class="tab-num">4</span>Asset group V4 — split large groups</button>
   </div>
 
   <!-- ====================================================== -->
@@ -841,8 +843,177 @@
         <div class="toolbar" style="margin-top: 20px;">
           <div class="left"><span id="v3MergeSummary" style="color: var(--muted); font-size: 13px;"></span></div>
           <div class="right">
-            <button class="btn btn-primary" id="v3DownloadXlsx">Download consolidated .xlsx</button>
+            <button class="btn" id="v3DownloadXlsx">Download consolidated .xlsx</button>
+            <button class="btn btn-primary" id="v3ContinueToV4">Continue to V4 →</button>
           </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- SECTION V4: SPLIT LARGE ASSET GROUPS                   -->
+  <!-- ====================================================== -->
+  <div id="sectionV4" class="hidden">
+    <div class="section-header">
+      <h2>Asset group V4 — split large groups</h2>
+      <p>Find asset groups that are still above the chosen property-count threshold, then add one more attribute into those group names to split them into more useful buckets.</p>
+    </div>
+
+    <ol class="steps" id="v4Steps">
+      <li class="step active" data-step="1"><span class="step-num">1</span>Source &amp; threshold</li>
+      <li class="step" data-step="2"><span class="step-num">2</span>Choose attribute</li>
+      <li class="step" data-step="3"><span class="step-num">3</span>Insert position</li>
+      <li class="step" data-step="4"><span class="step-num">4</span>Preview &amp; export</li>
+    </ol>
+
+    <!-- V4 STEP 1: SOURCE + THRESHOLD -->
+    <section class="panel" id="v4PanelSource">
+      <h2>Step 1 · Review large asset groups</h2>
+      <p class="subtitle">Use the V3 property-level output, or upload a property-level file that already contains an asset group column. Groups with more properties than the threshold are eligible for V4 splitting.</p>
+
+      <div class="drop-zone" id="v4DropZone">
+        <p><strong>Drop .xlsx file here</strong> or click to browse</p>
+        <p class="hint">Supports .xlsx, .xlsm, .csv</p>
+        <input type="file" id="v4FileInput" class="file-pick" accept=".xlsx,.xlsm,.csv">
+      </div>
+
+      <div class="file-info hidden" id="v4FileInfo">
+        <div class="meta">
+          <strong id="v4FileName"></strong>
+          <span id="v4FileSummary"></span>
+        </div>
+        <button class="btn-ghost btn" id="v4ChangeFile">Change file</button>
+      </div>
+
+      <div id="v4SourceNotice" class="hidden" style="margin-top:12px; padding:12px 14px; border:1px solid #a3d9b5; background:#e6f7ef; border-radius:8px; font-size:13px; color:#0a5a3c; line-height:1.55;"></div>
+
+      <div class="field-row" style="margin-top: 18px;">
+        <div class="field">
+          <label for="v4GroupSelect">Current asset group column</label>
+          <select id="v4GroupSelect"></select>
+          <div class="field-hint" id="v4GroupSample"></div>
+        </div>
+        <div class="field">
+          <label for="v4Threshold">Large-group threshold</label>
+          <input type="number" id="v4Threshold" min="1" step="1" value="300">
+          <div class="field-hint">Groups with more than this many properties will be split.</div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat"><div class="val" id="v4StatSourceRows">0</div><div class="lbl">Property rows</div></div>
+        <div class="stat"><div class="val" id="v4StatSourceGroups">0</div><div class="lbl">Current asset groups</div></div>
+        <div class="stat"><div class="val" id="v4StatSourceLarge">0</div><div class="lbl">Groups over threshold</div></div>
+        <div class="stat"><div class="val" id="v4StatSourceLargeProps">0</div><div class="lbl">Properties in those groups</div></div>
+      </div>
+
+      <div id="v4SourceWarn" class="hidden" style="margin-top:12px; padding:12px 14px; border:1px solid #f0c674; background:#fff8e6; border-radius:8px; font-size:13px; color:#6b4f00; line-height:1.55;"></div>
+
+      <div class="toolbar">
+        <button class="btn" id="v4BackToV3">← Back to V3</button>
+        <button class="btn btn-primary" id="v4SourceNext" disabled>Choose split attribute →</button>
+      </div>
+    </section>
+
+    <!-- V4 STEP 2: ATTRIBUTE SOURCE + SELECTION -->
+    <section class="panel hidden" id="v4PanelAttribute">
+      <h2>Step 2 · Choose one attribute to split the large groups</h2>
+      <p class="subtitle">Pick an existing property attribute, or add attributes from a file with the same property rows in the same order. Only groups over the threshold are split; all other groups keep their V3 name unchanged.</p>
+
+      <div class="drop-zone" id="v4AttrDropZone" style="padding:24px;">
+        <p><strong>Optional:</strong> upload a same-row file with extra attributes</p>
+        <p class="hint">New columns will be matched to the current property rows by row order.</p>
+        <input type="file" id="v4AttrFileInput" class="file-pick" accept=".xlsx,.xlsm,.csv">
+      </div>
+
+      <div class="file-info hidden" id="v4AttrFileInfo">
+        <div class="meta">
+          <strong id="v4AttrFileName"></strong>
+          <span id="v4AttrFileSummary"></span>
+        </div>
+        <button class="btn-ghost btn" id="v4AttrChangeFile">Use another file</button>
+      </div>
+
+      <div class="toolbar" style="margin-top: 18px; margin-bottom: 8px;">
+        <div class="left">
+          <span id="v4AttributeCount" style="color: var(--muted); font-size: 13px;">0 attributes available</span>
+        </div>
+        <div class="right">
+          <span id="v4SelectedAttributeLabel" style="color: var(--muted); font-size: 13px;">No attribute selected</span>
+        </div>
+      </div>
+
+      <div class="columns-grid" id="v4ColumnsGrid"></div>
+
+      <div class="selected-preview" id="v4AttributePreview">
+        <span class="label">Split preview (first property in a large group):</span>
+        <span id="v4AttributePreviewText">— choose an attribute above —</span>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="v4AttrBack">← Back</button>
+        <button class="btn btn-primary" id="v4AttrNext" disabled>Choose insertion point →</button>
+      </div>
+    </section>
+
+    <!-- V4 STEP 3: INSERT POSITION -->
+    <section class="panel hidden" id="v4PanelPosition">
+      <h2>Step 3 · Choose where the new attribute sits</h2>
+      <p class="subtitle">Asset group names are ordered attributes separated by <code>|</code>. Pick where the new attribute should be inserted for the large groups.</p>
+
+      <div class="selected-preview">
+        <span class="label">Current asset group pieces (first large group):</span>
+        <span id="v4PositionPieces"></span>
+      </div>
+
+      <div class="field-row" style="margin-top:16px;">
+        <div class="field">
+          <label for="v4InsertPosition">Insert selected attribute</label>
+          <select id="v4InsertPosition"></select>
+          <div class="field-hint" id="v4InsertHint"></div>
+        </div>
+      </div>
+
+      <div class="selected-preview">
+        <span class="label">Asset Group v4 preview:</span>
+        <span id="v4PositionPreview">— choose an insertion point —</span>
+      </div>
+
+      <h3 style="margin: 22px 0 8px; font-size:15px; font-weight:600;">Large groups to split</h3>
+      <div class="table-wrap">
+        <table id="v4LargeGroupsTable"></table>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="v4PositionBack">← Back</button>
+        <button class="btn btn-primary" id="v4GenerateBtn">Form asset group V4 →</button>
+      </div>
+    </section>
+
+    <!-- V4 STEP 4: PREVIEW + EXPORT -->
+    <section class="panel hidden" id="v4PanelExport">
+      <h2>Step 4 · Preview &amp; export</h2>
+      <p class="subtitle">The new <strong>asset group v4</strong> column is added after the current asset group column. Only over-threshold V3 groups receive the extra attribute.</p>
+
+      <div class="stats-row">
+        <div class="stat"><div class="val" id="v4StatRows">0</div><div class="lbl">Property rows</div></div>
+        <div class="stat"><div class="val" id="v4StatV3Groups">0</div><div class="lbl">Groups before V4</div></div>
+        <div class="stat"><div class="val" id="v4StatV3Large">0</div><div class="lbl">Groups split</div></div>
+        <div class="stat"><div class="val" id="v4StatV4Groups">0</div><div class="lbl">Groups after V4</div></div>
+        <div class="stat"><div class="val" id="v4StatSplitRows">0</div><div class="lbl">Rows receiving attribute</div></div>
+        <div class="stat"><div class="val" id="v4StatRemainingLarge">0</div><div class="lbl">V4 groups over threshold</div></div>
+      </div>
+
+      <h3 style="margin: 8px 0 8px; font-size:15px; font-weight:600;">V3 → V4 split mapping</h3>
+      <div class="table-wrap">
+        <table id="v4PreviewTable"></table>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="v4BackToPosition">← Edit insertion point</button>
+        <div class="right">
+          <button class="btn btn-primary" id="v4DownloadXlsx">Download asset group V4 .xlsx</button>
         </div>
       </div>
     </section>
@@ -943,6 +1114,27 @@ const v3 = {
   validRowCount: 0,
 };
 
+const v4 = {
+  headers: [],
+  rows: [],
+  baseHeaders: [],
+  baseRows: [],
+  fileName: '',
+  sheetName: '',
+  priorSheets: [],
+  groupCol: null,
+  threshold: 300,
+  groupCounts: new Map(),
+  largeGroups: new Map(),
+  largeGroupRows: [],
+  attributeCol: null,
+  uploadedFileName: '',
+  uploadedHeaders: [],
+  insertIndex: null,
+  outputRows: [],
+  mappingRows: [],
+};
+
 /* ====================================================== */
 /* section + step navigation                               */
 /* ====================================================== */
@@ -953,6 +1145,7 @@ function setSection(name) {
   document.getElementById('sectionV1').classList.toggle('hidden', name !== 'v1');
   document.getElementById('sectionV2').classList.toggle('hidden', name !== 'v2');
   document.getElementById('sectionV3').classList.toggle('hidden', name !== 'v3');
+  document.getElementById('sectionV4').classList.toggle('hidden', name !== 'v4');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 document.querySelectorAll('.section-tab').forEach(b => {
@@ -995,6 +1188,15 @@ const v3Panels = [
   ['v3PanelConsolidate', 3],
 ];
 const setV3Step = (n) => setStep(v3StepsEl, v3Panels, n);
+
+const v4StepsEl = document.getElementById('v4Steps');
+const v4Panels = [
+  ['v4PanelSource', 1],
+  ['v4PanelAttribute', 2],
+  ['v4PanelPosition', 3],
+  ['v4PanelExport', 4],
+];
+const setV4Step = (n) => setStep(v4StepsEl, v4Panels, n);
 
 /* ====================================================== */
 /* shared file reading                                     */
@@ -3361,6 +3563,7 @@ function v3RenderMergeTable() {
 
 /* ---------- V3 export ---------- */
 document.getElementById('v3DownloadXlsx').addEventListener('click', downloadV3Xlsx);
+document.getElementById('v3ContinueToV4').addEventListener('click', v3HandoffToV4);
 
 function v3BuildPivotSheet() {
   const counts = new Map();
@@ -3476,6 +3679,760 @@ function downloadV3Xlsx() {
     saveWorkbook(wb, `${base} - asset group v3.xlsx`, 'xlsx');
   } catch (err) {
     console.error('v3 export failed:', err);
+    alert('Could not build the .xlsx file: ' + (err && err.message ? err.message : err));
+  }
+}
+
+/* ====================================================== */
+/* SECTION V4 — SPLIT LARGE ASSET GROUPS                  */
+/* ====================================================== */
+
+/* ---------- V3 → V4 handoff ---------- */
+function v3BuildPropertyRowsForV4() {
+  if (!v3.processor || !v3.propertyRows || !v3.propertyRows.length || !v3.linkColumn) return null;
+  const v3Col = 'asset group v3';
+  const lookup = v3BuildGroupLookup();
+  const headers = v3.propertyHeaders.filter(h => h !== v3Col);
+  const linkIdx = headers.indexOf(v3.linkColumn);
+  if (linkIdx === -1) headers.push(v3Col);
+  else headers.splice(linkIdx + 1, 0, v3Col);
+
+  const rows = v3.propertyRows.map(r => {
+    const linkVal = fmtVal(r[v3.linkColumn]);
+    const v3Val = lookup.get(linkVal) || linkVal;
+    const out = {};
+    for (const h of headers) out[h] = h === v3Col ? v3Val : (r[h] ?? '');
+    return out;
+  });
+  return { headers, rows, groupCol: v3Col };
+}
+
+function v3BuildSupportingSheetsForV4() {
+  const sheets = [];
+  const priorAdditional = (v3.priorSheets || []).slice(1);
+  sheets.push(...priorAdditional.filter(item => !/mapping/i.test(item.name)));
+  if (v3.processor) sheets.push({ sheet: v3BuildPivotSheet(), name: 'Asset group v3 pivot' });
+  sheets.push(...priorAdditional.filter(item => /mapping/i.test(item.name)));
+  if (v3.processor) sheets.push({ sheet: v3BuildMappingSheet(), name: 'v2 to v3 mapping' });
+  return sheets;
+}
+
+function v3HandoffToV4() {
+  if (!v3.processor || !v3.processor.groups || !v3.processor.groups.length) {
+    alert('Please run V3 consolidation before continuing to V4.');
+    return;
+  }
+
+  const source = v3BuildPropertyRowsForV4();
+  const supportingSheets = v3BuildSupportingSheetsForV4();
+  v4ResetState();
+  v4.priorSheets = supportingSheets;
+  v4.fileName = v3.fileName || 'asset-groups';
+  v4.sheetName = v3.sheetName || 'Properties';
+
+  setSection('v4');
+
+  if (!source) {
+    v4ShowEmptySource(
+      'V4 needs property-level rows so it can split each large group by a property attribute. This V3 run was based on an aggregated sheet, so upload a property-level file that contains asset group v3 and the attributes you want to use.'
+    );
+    setV4Step(1);
+    return;
+  }
+
+  v4SetSource({
+    headers: source.headers,
+    rows: source.rows,
+    fileName: v4.fileName,
+    sheetName: 'Properties',
+    groupCol: source.groupCol,
+    priorSheets: supportingSheets,
+    sourceLabel: 'Using the property-level output from V3. Original attributes are available for the V4 split.'
+  });
+  setV4Step(1);
+}
+
+/* ---------- V4 source upload + threshold analysis ---------- */
+const v4DropZone = document.getElementById('v4DropZone');
+const v4FileInput = document.getElementById('v4FileInput');
+v4DropZone.addEventListener('click', () => v4FileInput.click());
+v4DropZone.addEventListener('dragover', e => { e.preventDefault(); v4DropZone.classList.add('dragging'); });
+v4DropZone.addEventListener('dragleave', () => v4DropZone.classList.remove('dragging'));
+v4DropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  v4DropZone.classList.remove('dragging');
+  if (e.dataTransfer.files.length) v4HandleFile(e.dataTransfer.files[0]);
+});
+v4FileInput.addEventListener('change', e => {
+  if (e.target.files.length) v4HandleFile(e.target.files[0]);
+});
+document.getElementById('v4ChangeFile').addEventListener('click', () => {
+  v4ResetState();
+  v4FileInput.value = '';
+  v4ShowEmptySource('');
+});
+
+const v4ThresholdInput = document.getElementById('v4Threshold');
+v4ThresholdInput.addEventListener('input', () => {
+  v4.threshold = Math.max(1, parseInt(v4ThresholdInput.value, 10) || 300);
+  v4ThresholdInput.value = v4.threshold;
+  v4AnalyzeSource();
+});
+
+document.getElementById('v4GroupSelect').addEventListener('change', e => {
+  v4.groupCol = e.target.value || null;
+  v4AnalyzeSource();
+});
+document.getElementById('v4BackToV3').addEventListener('click', () => setSection('v3'));
+document.getElementById('v4SourceNext').addEventListener('click', () => {
+  v4BuildAttributeGrid();
+  setV4Step(2);
+});
+
+async function v4HandleFile(file) {
+  try {
+    const { workbook, sheetName, headers, rows } = await readWorkbook(file);
+    const groupCol = v4DetectGroupColumn(headers);
+    v4SetSource({
+      headers,
+      rows,
+      fileName: file.name,
+      sheetName,
+      groupCol,
+      priorSheets: [],
+      sourceLabel: ''
+    });
+    v4.workbook = workbook;
+    setV4Step(1);
+  } catch (err) {
+    if (err && err.cancelled) {
+      v4FileInput.value = '';
+      return;
+    }
+    alert('Could not read file: ' + err.message);
+  }
+}
+
+function v4ResetState() {
+  v4.headers = [];
+  v4.rows = [];
+  v4.baseHeaders = [];
+  v4.baseRows = [];
+  v4.fileName = '';
+  v4.sheetName = '';
+  v4.priorSheets = [];
+  v4.groupCol = null;
+  v4.threshold = Math.max(1, parseInt(document.getElementById('v4Threshold').value, 10) || 300);
+  v4.groupCounts = new Map();
+  v4.largeGroups = new Map();
+  v4.largeGroupRows = [];
+  v4.attributeCol = null;
+  v4.uploadedFileName = '';
+  v4.uploadedHeaders = [];
+  v4.insertIndex = null;
+  v4.outputRows = [];
+  v4.mappingRows = [];
+  document.getElementById('v4AttrFileInfo').classList.add('hidden');
+  document.getElementById('v4AttrDropZone').classList.remove('hidden');
+  document.getElementById('v4AttrFileInput').value = '';
+}
+
+function v4ShowEmptySource(message) {
+  document.getElementById('v4DropZone').classList.remove('hidden');
+  document.getElementById('v4FileInfo').classList.add('hidden');
+  const notice = document.getElementById('v4SourceNotice');
+  notice.classList.add('hidden');
+  notice.textContent = '';
+  v4PopulateGroupSelector();
+  const warn = document.getElementById('v4SourceWarn');
+  if (message) {
+    warn.textContent = message;
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+    warn.textContent = '';
+  }
+  v4AnalyzeSource();
+}
+
+function v4SetSource({ headers, rows, fileName, sheetName, groupCol, priorSheets, sourceLabel }) {
+  v4.headers = [...headers];
+  v4.rows = rows.map(r => ({ ...r }));
+  v4.baseHeaders = [...headers];
+  v4.baseRows = rows.map(r => ({ ...r }));
+  v4.fileName = fileName || 'asset-groups';
+  v4.sheetName = sheetName || 'Properties';
+  v4.priorSheets = priorSheets || [];
+  v4.groupCol = groupCol && headers.includes(groupCol) ? groupCol : v4DetectGroupColumn(headers);
+  v4.attributeCol = null;
+  v4.uploadedFileName = '';
+  v4.uploadedHeaders = [];
+  v4.insertIndex = null;
+  v4.outputRows = [];
+  v4.mappingRows = [];
+
+  document.getElementById('v4DropZone').classList.add('hidden');
+  document.getElementById('v4FileInfo').classList.remove('hidden');
+  document.getElementById('v4FileName').textContent = fileName ? `${fileName}${sourceLabel ? ' (from section 3)' : ''}` : 'V4 source';
+  document.getElementById('v4FileSummary').textContent =
+    `${v4.rows.length.toLocaleString()} rows · ${v4.headers.length} columns · ${v4.sheetName}`;
+  const notice = document.getElementById('v4SourceNotice');
+  if (sourceLabel) {
+    notice.textContent = sourceLabel;
+    notice.classList.remove('hidden');
+  } else {
+    notice.classList.add('hidden');
+    notice.textContent = '';
+  }
+  document.getElementById('v4AttrFileInfo').classList.add('hidden');
+  document.getElementById('v4AttrDropZone').classList.remove('hidden');
+  document.getElementById('v4AttrFileInput').value = '';
+
+  v4PopulateGroupSelector();
+  v4AnalyzeSource();
+}
+
+function v4DetectGroupColumn(headers) {
+  const exactV3 = headers.find(h => /^\s*asset\s*group\s*v?\s*3\s*$/i.test(h));
+  if (exactV3) return exactV3;
+  const exactV4 = headers.find(h => /^\s*asset\s*group\s*v?\s*4\s*$/i.test(h));
+  if (exactV4) return exactV4;
+  const versions = headers
+    .map(h => {
+      const m = String(h).match(/^\s*asset\s*group\s*v?\s*(\d+)\s*$/i);
+      return m ? { h, v: parseInt(m[1], 10) } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.v - a.v);
+  if (versions.length) return versions[0].h;
+  return headers.find(h => /asset\s*group/i.test(h)) || null;
+}
+
+function v4PopulateGroupSelector() {
+  const sel = document.getElementById('v4GroupSelect');
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = v4.headers.length ? '— choose a column —' : 'Upload a source first';
+  sel.appendChild(placeholder);
+  v4.headers.forEach(h => {
+    const o = document.createElement('option');
+    o.value = h;
+    o.textContent = h;
+    sel.appendChild(o);
+  });
+  if (v4.groupCol && v4.headers.includes(v4.groupCol)) sel.value = v4.groupCol;
+}
+
+function v4AnalyzeSource() {
+  const rows = v4.rows || [];
+  const groupCol = v4.groupCol;
+  const warn = document.getElementById('v4SourceWarn');
+  v4.groupCounts = new Map();
+  v4.largeGroups = new Map();
+  v4.largeGroupRows = [];
+
+  if (rows.length && groupCol) {
+    for (const r of rows) {
+      const name = fmtVal(r[groupCol]);
+      if (!name) continue;
+      v4.groupCounts.set(name, (v4.groupCounts.get(name) || 0) + 1);
+    }
+    for (const [name, n] of v4.groupCounts) {
+      if (n > v4.threshold) v4.largeGroups.set(name, n);
+    }
+    v4.largeGroupRows = rows.filter(r => v4.largeGroups.has(fmtVal(r[groupCol])));
+  }
+
+  let largeProps = 0;
+  for (const n of v4.largeGroups.values()) largeProps += n;
+  document.getElementById('v4StatSourceRows').textContent = rows.length.toLocaleString();
+  document.getElementById('v4StatSourceGroups').textContent = v4.groupCounts.size.toLocaleString();
+  document.getElementById('v4StatSourceLarge').textContent = v4.largeGroups.size.toLocaleString();
+  document.getElementById('v4StatSourceLargeProps').textContent = largeProps.toLocaleString();
+
+  const hint = document.getElementById('v4GroupSample');
+  if (groupCol) {
+    const samples = [];
+    for (const r of rows) {
+      const v = fmtVal(r[groupCol]);
+      if (v && !samples.includes(v)) samples.push(v);
+      if (samples.length >= 2) break;
+    }
+    hint.textContent = samples.length ? `Sample values: ${samples.join(' · ')}` : '(this column appears to be empty)';
+  } else {
+    hint.textContent = '';
+  }
+
+  if (!rows.length) {
+    warn.textContent = warn.textContent || 'Upload a property-level file, or continue here from a completed V3 run.';
+    warn.classList.remove('hidden');
+  } else if (!groupCol) {
+    warn.textContent = 'Choose the current asset group column before continuing.';
+    warn.classList.remove('hidden');
+  } else if (!v4.largeGroups.size) {
+    warn.textContent = `No asset groups are above ${v4.threshold.toLocaleString()} properties. Lower the threshold if you still want to test a V4 split.`;
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+    warn.textContent = '';
+  }
+
+  document.getElementById('v4SourceNext').disabled = !(rows.length && groupCol && v4.largeGroups.size);
+}
+
+/* ---------- optional extra attributes upload ---------- */
+const v4AttrDropZone = document.getElementById('v4AttrDropZone');
+const v4AttrFileInput = document.getElementById('v4AttrFileInput');
+v4AttrDropZone.addEventListener('click', () => v4AttrFileInput.click());
+v4AttrDropZone.addEventListener('dragover', e => { e.preventDefault(); v4AttrDropZone.classList.add('dragging'); });
+v4AttrDropZone.addEventListener('dragleave', () => v4AttrDropZone.classList.remove('dragging'));
+v4AttrDropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  v4AttrDropZone.classList.remove('dragging');
+  if (e.dataTransfer.files.length) v4HandleAttributeFile(e.dataTransfer.files[0]);
+});
+v4AttrFileInput.addEventListener('change', e => {
+  if (e.target.files.length) v4HandleAttributeFile(e.target.files[0]);
+});
+document.getElementById('v4AttrChangeFile').addEventListener('click', () => {
+  v4RestoreBaseRows();
+  v4AttrFileInput.value = '';
+  v4HandleAttributeFilePicker();
+});
+
+function v4HandleAttributeFilePicker() {
+  document.getElementById('v4AttrFileInfo').classList.add('hidden');
+  document.getElementById('v4AttrDropZone').classList.remove('hidden');
+  v4BuildAttributeGrid();
+}
+
+async function v4HandleAttributeFile(file) {
+  try {
+    if (!v4.rows.length) {
+      alert('Upload or hand off a V4 source before adding extra attributes.');
+      return;
+    }
+    const { headers, rows } = await readWorkbook(file);
+    if (rows.length !== v4.baseRows.length) {
+      alert(
+        `The extra-attributes file has ${rows.length.toLocaleString()} rows, but the current V4 source has ${v4.baseRows.length.toLocaleString()} rows. ` +
+        'Please upload a file with the same property rows in the same order.'
+      );
+      return;
+    }
+
+    v4RestoreBaseRows();
+    const existing = new Set(v4.headers);
+    const newHeaders = [];
+    for (const h of headers) {
+      if (v4.baseHeaders.includes(h)) continue;
+      const unique = v4UniqueHeader(existing, h);
+      existing.add(unique);
+      newHeaders.push({ source: h, target: unique });
+    }
+
+    if (!newHeaders.length) {
+      alert('No new columns were found in that file. Existing columns were ignored because they are already in the V4 source.');
+      return;
+    }
+
+    v4.headers = [...v4.baseHeaders, ...newHeaders.map(h => h.target)];
+    v4.rows = v4.baseRows.map((r, i) => {
+      const out = { ...r };
+      for (const h of newHeaders) out[h.target] = rows[i][h.source] ?? '';
+      return out;
+    });
+    v4.uploadedFileName = file.name;
+    v4.uploadedHeaders = newHeaders.map(h => h.target);
+    v4.attributeCol = null;
+    v4.insertIndex = null;
+
+    document.getElementById('v4AttrDropZone').classList.add('hidden');
+    document.getElementById('v4AttrFileInfo').classList.remove('hidden');
+    document.getElementById('v4AttrFileName').textContent = file.name;
+    document.getElementById('v4AttrFileSummary').textContent =
+      `${newHeaders.length.toLocaleString()} new column${newHeaders.length === 1 ? '' : 's'} added by row order`;
+
+    v4AnalyzeSource();
+    v4BuildAttributeGrid();
+  } catch (err) {
+    if (err && err.cancelled) {
+      v4AttrFileInput.value = '';
+      return;
+    }
+    alert('Could not read file: ' + err.message);
+  }
+}
+
+function v4RestoreBaseRows() {
+  v4.headers = [...v4.baseHeaders];
+  v4.rows = v4.baseRows.map(r => ({ ...r }));
+  v4.uploadedFileName = '';
+  v4.uploadedHeaders = [];
+  if (v4.attributeCol && !v4.headers.includes(v4.attributeCol)) v4.attributeCol = null;
+  if (!v4.groupCol || !v4.headers.includes(v4.groupCol)) v4.groupCol = v4DetectGroupColumn(v4.headers);
+  v4PopulateGroupSelector();
+  v4AnalyzeSource();
+}
+
+function v4UniqueHeader(existing, preferred) {
+  const clean = String(preferred || 'Uploaded attribute').trim() || 'Uploaded attribute';
+  if (!existing.has(clean)) return clean;
+  let i = 2;
+  let candidate = `${clean} (uploaded)`;
+  while (existing.has(candidate)) {
+    candidate = `${clean} (uploaded ${i})`;
+    i++;
+  }
+  return candidate;
+}
+
+/* ---------- attribute selection ---------- */
+document.getElementById('v4AttrBack').addEventListener('click', () => setV4Step(1));
+document.getElementById('v4AttrNext').addEventListener('click', () => {
+  v4BuildPositionUI();
+  setV4Step(3);
+});
+
+function v4EligibleAttributeHeaders() {
+  return v4.headers.filter(h => {
+    if (h === v4.groupCol) return false;
+    if (/^\s*asset\s*group\b/i.test(h)) return false;
+    if (/^\s*count\s+of\s+properties\s*$/i.test(h)) return false;
+    return true;
+  });
+}
+
+function v4BuildAttributeGrid() {
+  const grid = document.getElementById('v4ColumnsGrid');
+  grid.innerHTML = '';
+  const attrs = v4EligibleAttributeHeaders();
+  document.getElementById('v4AttributeCount').textContent =
+    `${attrs.length.toLocaleString()} attribute${attrs.length === 1 ? '' : 's'} available`;
+  if (v4.attributeCol && !attrs.includes(v4.attributeCol)) v4.attributeCol = null;
+
+  if (!attrs.length) {
+    grid.innerHTML = '<div class="empty-hint" style="grid-column:1/-1;">No usable attributes found. Upload a same-row file with an extra attribute column.</div>';
+    v4UpdateAttributeSelectionUI();
+    return;
+  }
+
+  for (const col of attrs) {
+    let sample = '';
+    const distinct = new Set();
+    for (const r of v4.largeGroupRows) {
+      const v = fmtVal(r[col]);
+      if (v && !sample) sample = v;
+      if (v) distinct.add(v);
+      if (distinct.size > 200) break;
+    }
+    const card = document.createElement('div');
+    card.className = 'col-card';
+    card.dataset.col = col;
+    const uploaded = v4.uploadedHeaders.includes(col)
+      ? '<div style="font-size:11px; color:var(--success); font-weight:600; margin-bottom:4px;">Uploaded</div>'
+      : '';
+    card.innerHTML = `
+      ${uploaded}
+      <div class="col-name">${escapeHtml(col)}</div>
+      <div class="col-sample">e.g. ${escapeHtml(sample) || '(empty)'}</div>
+      <div class="col-sample">${distinct.size.toLocaleString()} distinct value${distinct.size === 1 ? '' : 's'} in large groups</div>
+    `;
+    card.addEventListener('click', () => {
+      v4.attributeCol = col;
+      v4.insertIndex = null;
+      v4UpdateAttributeSelectionUI();
+    });
+    grid.appendChild(card);
+  }
+  v4UpdateAttributeSelectionUI();
+}
+
+function v4UpdateAttributeSelectionUI() {
+  document.querySelectorAll('#v4ColumnsGrid .col-card').forEach(card => {
+    card.classList.toggle('selected', card.dataset.col === v4.attributeCol);
+  });
+  document.getElementById('v4SelectedAttributeLabel').textContent =
+    v4.attributeCol ? `Selected: ${v4.attributeCol}` : 'No attribute selected';
+  document.getElementById('v4AttrNext').disabled = !v4.attributeCol;
+
+  const first = v4.largeGroupRows[0];
+  const preview = first && v4.attributeCol
+    ? v4BuildNameWithInsertedAttribute(fmtVal(first[v4.groupCol]), fmtVal(first[v4.attributeCol]), v4SplitGroupName(fmtVal(first[v4.groupCol])).length)
+    : '— choose an attribute above —';
+  document.getElementById('v4AttributePreviewText').textContent = preview;
+}
+
+/* ---------- insertion position ---------- */
+document.getElementById('v4PositionBack').addEventListener('click', () => setV4Step(2));
+document.getElementById('v4GenerateBtn').addEventListener('click', v4GenerateGroups);
+document.getElementById('v4InsertPosition').addEventListener('change', e => {
+  v4.insertIndex = parseInt(e.target.value, 10);
+  v4UpdatePositionPreview();
+});
+
+function v4BuildPositionUI() {
+  const first = v4.largeGroupRows[0];
+  const parts = first ? v4SplitGroupName(fmtVal(first[v4.groupCol])) : [];
+  const pieces = document.getElementById('v4PositionPieces');
+  pieces.innerHTML = parts.length
+    ? parts.map((p, i) =>
+        `<span style="display:inline-block; padding:3px 8px; margin:2px 4px 2px 0; border:1px solid var(--border); border-radius:4px; background:white; font-family:'SF Mono',Monaco,Consolas,monospace; font-size:12px;">` +
+        `<span style="color:var(--muted); font-size:10px;">pos ${i + 1}</span> ${escapeHtml(p) || '(empty)'}` +
+        `</span>`
+      ).join('')
+    : '(no group name available)';
+
+  const sel = document.getElementById('v4InsertPosition');
+  sel.innerHTML = '';
+  for (let i = 0; i <= parts.length; i++) {
+    const o = document.createElement('option');
+    o.value = String(i);
+    if (i === 0) o.textContent = parts.length ? `Before piece 1 · ${parts[0] || '(empty)'}` : 'As first piece';
+    else if (i === parts.length) o.textContent = parts.length ? `After final piece · ${parts[i - 1] || '(empty)'}` : 'As final piece';
+    else o.textContent = `After piece ${i} · ${parts[i - 1] || '(empty)'}`;
+    sel.appendChild(o);
+  }
+  if (v4.insertIndex == null || v4.insertIndex > parts.length) v4.insertIndex = parts.length;
+  sel.value = String(v4.insertIndex);
+  document.getElementById('v4InsertHint').textContent =
+    v4.attributeCol ? `Selected attribute: ${v4.attributeCol}` : '';
+
+  v4RenderLargeGroupsTable();
+  v4UpdatePositionPreview();
+}
+
+function v4UpdatePositionPreview() {
+  const first = v4.largeGroupRows[0];
+  const preview = first && v4.attributeCol && v4.insertIndex != null
+    ? v4BuildNameWithInsertedAttribute(fmtVal(first[v4.groupCol]), fmtVal(first[v4.attributeCol]), v4.insertIndex)
+    : '— choose an insertion point —';
+  document.getElementById('v4PositionPreview').textContent = preview;
+}
+
+function v4RenderLargeGroupsTable() {
+  const table = document.getElementById('v4LargeGroupsTable');
+  const entries = [...v4.largeGroups.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return naturalCompare(a[0], b[0]);
+  });
+  let html = '<thead><tr><th>Current asset group</th><th style="text-align:right;">Properties</th></tr></thead><tbody>';
+  if (!entries.length) {
+    html += '<tr><td colspan="2" style="text-align:center; padding:20px; color:var(--muted);">No groups above threshold.</td></tr>';
+  } else {
+    for (const [name, n] of entries.slice(0, 300)) {
+      html += '<tr>' +
+        `<td>${escapeHtml(name)}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${n.toLocaleString()}</td>` +
+        '</tr>';
+    }
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  const wrap = table.parentElement;
+  const oldFoot = wrap.querySelector('.v4-large-foot');
+  if (oldFoot) oldFoot.remove();
+  if (entries.length > 300) {
+    const foot = document.createElement('div');
+    foot.className = 'v4-large-foot';
+    foot.style.cssText = 'padding:10px 14px;color:var(--muted);font-size:12px;text-align:center;background:#fafbfc;border-top:1px solid var(--border);';
+    foot.textContent = `Showing first 300 of ${entries.length.toLocaleString()} large groups. Full mapping is in the download.`;
+    wrap.appendChild(foot);
+  }
+}
+
+function v4SplitGroupName(name) {
+  const s = String(name ?? '').trim();
+  if (!s) return [''];
+  return s.split('|').map(p => p.trim());
+}
+
+function v4BuildNameWithInsertedAttribute(groupName, attrValue, insertIndex) {
+  const parts = v4SplitGroupName(groupName);
+  const idx = Math.max(0, Math.min(insertIndex == null ? parts.length : insertIndex, parts.length));
+  parts.splice(idx, 0, fmtVal(attrValue));
+  return parts.join(' | ');
+}
+
+/* ---------- generate + render ---------- */
+document.getElementById('v4BackToPosition').addEventListener('click', () => setV4Step(3));
+document.getElementById('v4DownloadXlsx').addEventListener('click', downloadV4Xlsx);
+
+function v4GenerateGroups() {
+  if (!v4.rows.length || !v4.groupCol || !v4.attributeCol) {
+    alert('Choose a V4 source and split attribute first.');
+    return;
+  }
+  const v4Col = 'asset group v4';
+  const sourceLarge = new Map(v4.largeGroups);
+  const mapping = new Map();
+  let splitRows = 0;
+
+  v4.outputRows = v4.rows.map(r => {
+    const before = fmtVal(r[v4.groupCol]);
+    let after = before;
+    if (sourceLarge.has(before)) {
+      after = v4BuildNameWithInsertedAttribute(before, fmtVal(r[v4.attributeCol]), v4.insertIndex);
+      splitRows++;
+      const attrValue = fmtVal(r[v4.attributeCol]);
+      const key = [before, attrValue, after].join('\u0001');
+      if (!mapping.has(key)) {
+        mapping.set(key, {
+          sourceGroup: before,
+          attrValue,
+          targetGroup: after,
+          sourceCount: sourceLarge.get(before) || 0,
+          count: 0,
+        });
+      }
+      mapping.get(key).count++;
+    }
+    return { ...r, [v4Col]: after };
+  });
+
+  const v4Counts = new Map();
+  for (const r of v4.outputRows) {
+    const name = fmtVal(r[v4Col]);
+    if (!name) continue;
+    v4Counts.set(name, (v4Counts.get(name) || 0) + 1);
+  }
+  let remainingLarge = 0;
+  for (const n of v4Counts.values()) if (n > v4.threshold) remainingLarge++;
+
+  v4.mappingRows = [...mapping.values()].sort((a, b) => {
+    if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
+    const bySource = naturalCompare(a.sourceGroup, b.sourceGroup);
+    if (bySource !== 0) return bySource;
+    return naturalCompare(a.attrValue, b.attrValue);
+  });
+
+  document.getElementById('v4StatRows').textContent = v4.outputRows.length.toLocaleString();
+  document.getElementById('v4StatV3Groups').textContent = v4.groupCounts.size.toLocaleString();
+  document.getElementById('v4StatV3Large').textContent = sourceLarge.size.toLocaleString();
+  document.getElementById('v4StatV4Groups').textContent = v4Counts.size.toLocaleString();
+  document.getElementById('v4StatSplitRows').textContent = splitRows.toLocaleString();
+  document.getElementById('v4StatRemainingLarge').textContent = remainingLarge.toLocaleString();
+
+  v4RenderPreviewTable();
+  setV4Step(4);
+}
+
+function v4RenderPreviewTable() {
+  const table = document.getElementById('v4PreviewTable');
+  let html = '<thead><tr>' +
+    '<th>asset group v3</th>' +
+    `<th>${escapeHtml(v4.attributeCol || 'inserted attribute')}</th>` +
+    '<th>asset group v4</th>' +
+    '<th style="text-align:right;">source group count</th>' +
+    '<th style="text-align:right;">properties</th>' +
+    '</tr></thead><tbody>';
+
+  if (!v4.mappingRows.length) {
+    html += '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--muted);">No V4 splits were generated.</td></tr>';
+  } else {
+    for (const row of v4.mappingRows.slice(0, 300)) {
+      html += '<tr>' +
+        `<td>${escapeHtml(row.sourceGroup)}</td>` +
+        `<td>${escapeHtml(row.attrValue) || '<em style="color:var(--muted);">(blank)</em>'}</td>` +
+        `<td class="highlight" style="font-weight:600;">${escapeHtml(row.targetGroup)}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${row.sourceCount.toLocaleString()}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${row.count.toLocaleString()}</td>` +
+        '</tr>';
+    }
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  const wrap = table.parentElement;
+  const oldFoot = wrap.querySelector('.v4-map-foot');
+  if (oldFoot) oldFoot.remove();
+  if (v4.mappingRows.length > 300) {
+    const foot = document.createElement('div');
+    foot.className = 'v4-map-foot';
+    foot.style.cssText = 'padding:10px 14px;color:var(--muted);font-size:12px;text-align:center;background:#fafbfc;border-top:1px solid var(--border);';
+    foot.textContent = `Showing first 300 of ${v4.mappingRows.length.toLocaleString()} mapping rows. Full data is in the download.`;
+    wrap.appendChild(foot);
+  }
+}
+
+/* ---------- V4 export ---------- */
+function v4BuildRowsSheet() {
+  const v4Col = 'asset group v4';
+  const headers = v4.headers.filter(h => h !== v4Col);
+  const groupIdx = headers.indexOf(v4.groupCol);
+  if (groupIdx === -1) headers.push(v4Col);
+  else headers.splice(groupIdx + 1, 0, v4Col);
+  const aoa = [headers];
+  for (const r of v4.outputRows) {
+    aoa.push(headers.map(h => h === v4Col ? (r[v4Col] ?? '') : (r[h] ?? '')));
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(16, h.length + 2) }));
+  return ws;
+}
+
+function v4BuildPivotSheet() {
+  const counts = new Map();
+  for (const r of v4.outputRows) {
+    const name = fmtVal(r['asset group v4']);
+    if (!name) continue;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => naturalCompare(a[0], b[0]));
+  const aoa = [['asset group v4', 'count of properties', `over ${v4.threshold}?`]];
+  for (const [name, n] of sorted) aoa.push([name, n, n > v4.threshold ? 'yes' : 'no']);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 70 }, { wch: 22 }, { wch: 16 }];
+  return ws;
+}
+
+function v4BuildMappingSheet() {
+  const headers = ['asset group v3', v4.attributeCol || 'inserted attribute', 'asset group v4', 'source group count', 'count of properties'];
+  const aoa = [headers];
+  for (const row of v4.mappingRows) {
+    aoa.push([row.sourceGroup, row.attrValue, row.targetGroup, row.sourceCount, row.count]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 70 }, { wch: 26 }, { wch: 78 }, { wch: 22 }, { wch: 22 }];
+  return ws;
+}
+
+function v4BuildSettingsSheet() {
+  const aoa = [
+    ['setting', 'value'],
+    ['source group column', v4.groupCol || ''],
+    ['large-group threshold', v4.threshold],
+    ['inserted attribute', v4.attributeCol || ''],
+    ['insert position', v4.insertIndex == null ? '' : v4.insertIndex],
+    ['extra attribute file', v4.uploadedFileName || ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 28 }, { wch: 60 }];
+  return ws;
+}
+
+function appendV4WorkbookSheets(wb) {
+  appendSheet(wb, v4BuildRowsSheet(), v4.sheetName || 'Properties');
+  appendWorkbookSheets(wb, v4.priorSheets || []);
+  appendSheet(wb, v4BuildPivotSheet(), 'Asset group v4 pivot');
+  appendSheet(wb, v4BuildMappingSheet(), 'v3 to v4 mapping');
+  appendSheet(wb, v4BuildSettingsSheet(), 'v4 settings');
+}
+
+function downloadV4Xlsx() {
+  try {
+    if (!v4.outputRows || !v4.outputRows.length) {
+      alert('Nothing to export yet — please form asset group V4 first.');
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    appendV4WorkbookSheets(wb);
+    const base = (v4.fileName || 'asset-groups').replace(/\.[^.]+$/, '');
+    saveWorkbook(wb, `${base} - asset group v4.xlsx`, 'xlsx');
+  } catch (err) {
+    console.error('v4 export failed:', err);
     alert('Could not build the .xlsx file: ' + (err && err.message ? err.message : err));
   }
 }
