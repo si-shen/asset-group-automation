@@ -848,8 +848,9 @@
       <li class="step active" data-step="1"><span class="step-num">1</span>Threshold</li>
       <li class="step" data-step="2"><span class="step-num">2</span>Current asset group</li>
       <li class="step" data-step="3"><span class="step-num">3</span>Choose attribute</li>
-      <li class="step" data-step="4"><span class="step-num">4</span>Insert position</li>
-      <li class="step" data-step="5"><span class="step-num">5</span>Preview &amp; export</li>
+      <li class="step" data-step="4"><span class="step-num">4</span>Split impact</li>
+      <li class="step" data-step="5"><span class="step-num">5</span>Insert position</li>
+      <li class="step" data-step="6"><span class="step-num">6</span>Preview &amp; export</li>
     </ol>
 
     <!-- V4 STEP 1: SOURCE + THRESHOLD -->
@@ -954,17 +955,58 @@
 
       <div class="toolbar">
         <button class="btn" id="v4AttrBack">← Back</button>
-        <button class="btn btn-primary" id="v4AttrNext" disabled>Choose insertion point →</button>
+        <button class="btn btn-primary" id="v4AttrNext" disabled>Review split impact →</button>
       </div>
     </section>
 
-    <!-- V4 STEP 4: INSERT POSITION -->
+    <!-- V4 STEP 4: SPLIT IMPACT -->
+    <section class="panel hidden" id="v4PanelImpact">
+      <h2>Step 4 · Review split impact</h2>
+      <p class="subtitle">Choose how large an attribute-value bucket must be before it is split out. Smaller values keep the original asset group name.</p>
+
+      <div class="field-row" style="margin-top: 18px;">
+        <div class="field">
+          <label for="v4SplitComparator">Split bucket rule</label>
+          <select id="v4SplitComparator">
+            <option value="gt" selected>More than</option>
+            <option value="gte">At least</option>
+          </select>
+          <div class="field-hint">Use "More than 20" for 21+ properties, or "At least 20" for 20+ properties.</div>
+        </div>
+        <div class="field">
+          <label for="v4SplitMinCount">Properties per extracted split</label>
+          <input type="number" id="v4SplitMinCount" min="1" step="1" value="20">
+          <div class="field-hint" id="v4SplitRuleHint">Only attribute values with more than 20 properties are split out.</div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat"><div class="val" id="v4ImpactTotalBuckets">0</div><div class="lbl">Attribute-value buckets</div></div>
+        <div class="stat"><div class="val" id="v4ImpactSplitBuckets">0</div><div class="lbl">Buckets split out</div></div>
+        <div class="stat"><div class="val" id="v4ImpactSplitRows">0</div><div class="lbl">Rows receiving attribute</div></div>
+        <div class="stat"><div class="val" id="v4ImpactKeptRows">0</div><div class="lbl">Rows kept original</div></div>
+      </div>
+
+      <div id="v4ImpactWarn" class="hidden" style="margin-top:12px; padding:12px 14px; border:1px solid #f0c674; background:#fff8e6; border-radius:8px; font-size:13px; color:#6b4f00; line-height:1.55;"></div>
+
+      <h3 style="margin: 20px 0 8px; font-size:15px; font-weight:600;">Split impact by attribute value</h3>
+      <div class="table-wrap">
+        <table id="v4ImpactTable"></table>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="v4ImpactBack">← Back</button>
+        <button class="btn btn-primary" id="v4ImpactNext" disabled>Choose insertion point →</button>
+      </div>
+    </section>
+
+    <!-- V4 STEP 5: INSERT POSITION -->
     <section class="panel hidden" id="v4PanelPosition">
-      <h2>Step 4 · Choose where the new attribute sits</h2>
+      <h2>Step 5 · Choose where the new attribute sits</h2>
       <p class="subtitle">Asset group names are ordered attributes separated by <code>|</code>. Pick where the new attribute should be inserted for the large groups.</p>
 
       <div class="selected-preview">
-        <span class="label">Current asset group attributes (first large group):</span>
+        <span class="label">Current asset group attributes (sample split group):</span>
         <span id="v4PositionPieces"></span>
       </div>
 
@@ -981,7 +1023,7 @@
         <span id="v4PositionPreview">— choose an insertion point —</span>
       </div>
 
-      <h3 style="margin: 22px 0 8px; font-size:15px; font-weight:600;">Large groups to split</h3>
+      <h3 style="margin: 22px 0 8px; font-size:15px; font-weight:600;">Large group split summary</h3>
       <div class="table-wrap">
         <table id="v4LargeGroupsTable"></table>
       </div>
@@ -992,10 +1034,10 @@
       </div>
     </section>
 
-    <!-- V4 STEP 5: PREVIEW + EXPORT -->
+    <!-- V4 STEP 6: PREVIEW + EXPORT -->
     <section class="panel hidden" id="v4PanelExport">
-      <h2>Step 5 · Preview &amp; export</h2>
-      <p class="subtitle">The new <strong>asset group v4</strong> column is added after the current asset group column. Only over-threshold V3 groups receive the extra attribute.</p>
+      <h2>Step 6 · Preview &amp; export</h2>
+      <p class="subtitle">The new <strong>asset group v4</strong> column is added after the current asset group column. Only qualifying attribute-value buckets receive the extra attribute.</p>
 
       <div class="stats-row">
         <div class="stat"><div class="val" id="v4StatRows">0</div><div class="lbl">Property rows</div></div>
@@ -1131,6 +1173,10 @@ const v4 = {
   attributeCol: null,
   uploadedFileName: '',
   uploadedHeaders: [],
+  splitMinCount: 20,
+  splitComparator: 'gt',
+  splitImpactRows: [],
+  splitBucketKeys: new Set(),
   insertIndex: null,
   outputRows: [],
   mappingRows: [],
@@ -1195,8 +1241,9 @@ const v4Panels = [
   ['v4PanelSource', 1],
   ['v4PanelGroup', 2],
   ['v4PanelAttribute', 3],
-  ['v4PanelPosition', 4],
-  ['v4PanelExport', 5],
+  ['v4PanelImpact', 4],
+  ['v4PanelPosition', 5],
+  ['v4PanelExport', 6],
 ];
 const setV4Step = (n) => setStep(v4StepsEl, v4Panels, n);
 
@@ -3772,6 +3819,10 @@ function v4ResetState() {
   v4.attributeCol = null;
   v4.uploadedFileName = '';
   v4.uploadedHeaders = [];
+  v4.splitMinCount = Math.max(1, parseInt(document.getElementById('v4SplitMinCount').value, 10) || 20);
+  v4.splitComparator = document.getElementById('v4SplitComparator').value === 'gte' ? 'gte' : 'gt';
+  v4.splitImpactRows = [];
+  v4.splitBucketKeys = new Set();
   v4.insertIndex = null;
   v4.outputRows = [];
   v4.mappingRows = [];
@@ -3813,6 +3864,8 @@ function v4SetSource({ headers, rows, fileName, sheetName, groupCol, priorSheets
   v4.attributeCol = null;
   v4.uploadedFileName = '';
   v4.uploadedHeaders = [];
+  v4.splitImpactRows = [];
+  v4.splitBucketKeys = new Set();
   v4.insertIndex = null;
   v4.outputRows = [];
   v4.mappingRows = [];
@@ -4006,7 +4059,11 @@ async function v4HandleAttributeFile(file) {
     v4.uploadedFileName = file.name;
     v4.uploadedHeaders = newHeaders.map(h => h.target);
     v4.attributeCol = null;
+    v4.splitImpactRows = [];
+    v4.splitBucketKeys = new Set();
     v4.insertIndex = null;
+    v4.outputRows = [];
+    v4.mappingRows = [];
 
     document.getElementById('v4AttrDropZone').classList.add('hidden');
     document.getElementById('v4AttrFileInfo').classList.remove('hidden');
@@ -4031,7 +4088,12 @@ function v4RestoreBaseRows() {
   v4.uploadedFileName = '';
   v4.uploadedHeaders = [];
   if (v4.attributeCol && !v4.headers.includes(v4.attributeCol)) v4.attributeCol = null;
+  v4.splitImpactRows = [];
+  v4.splitBucketKeys = new Set();
   if (!v4.groupCol || !v4.headers.includes(v4.groupCol)) v4.groupCol = v4DetectGroupColumn(v4.headers);
+  v4.insertIndex = null;
+  v4.outputRows = [];
+  v4.mappingRows = [];
   v4PopulateGroupSelector();
   v4AnalyzeSource();
 }
@@ -4051,7 +4113,7 @@ function v4UniqueHeader(existing, preferred) {
 /* ---------- attribute selection ---------- */
 document.getElementById('v4AttrBack').addEventListener('click', () => setV4Step(2));
 document.getElementById('v4AttrNext').addEventListener('click', () => {
-  v4BuildPositionUI();
+  v4BuildImpactUI();
   setV4Step(4);
 });
 
@@ -4070,7 +4132,14 @@ function v4BuildAttributeGrid() {
   const attrs = v4EligibleAttributeHeaders();
   document.getElementById('v4AttributeCount').textContent =
     `${attrs.length.toLocaleString()} attribute${attrs.length === 1 ? '' : 's'} available`;
-  if (v4.attributeCol && !attrs.includes(v4.attributeCol)) v4.attributeCol = null;
+  if (v4.attributeCol && !attrs.includes(v4.attributeCol)) {
+    v4.attributeCol = null;
+    v4.splitImpactRows = [];
+    v4.splitBucketKeys = new Set();
+    v4.insertIndex = null;
+    v4.outputRows = [];
+    v4.mappingRows = [];
+  }
 
   if (!attrs.length) {
     grid.innerHTML = '<div class="empty-hint" style="grid-column:1/-1;">No usable attributes found. Upload a same-row file with an extra attribute column.</div>';
@@ -4097,7 +4166,11 @@ function v4BuildAttributeGrid() {
     `;
     card.addEventListener('click', () => {
       v4.attributeCol = col;
+      v4.splitImpactRows = [];
+      v4.splitBucketKeys = new Set();
       v4.insertIndex = null;
+      v4.outputRows = [];
+      v4.mappingRows = [];
       v4UpdateAttributeSelectionUI();
     });
     grid.appendChild(card);
@@ -4120,16 +4193,217 @@ function v4UpdateAttributeSelectionUI() {
   document.getElementById('v4AttributePreviewText').textContent = preview;
 }
 
+/* ---------- split impact threshold ---------- */
+const v4SplitMinInput = document.getElementById('v4SplitMinCount');
+const v4SplitComparatorSelect = document.getElementById('v4SplitComparator');
+v4SplitMinInput.addEventListener('input', () => v4BuildImpactUI());
+v4SplitComparatorSelect.addEventListener('change', () => v4BuildImpactUI());
+document.getElementById('v4ImpactBack').addEventListener('click', () => setV4Step(3));
+document.getElementById('v4ImpactNext').addEventListener('click', () => {
+  v4BuildPositionUI();
+  setV4Step(5);
+});
+
+function v4ReadSplitSettings() {
+  const raw = String(v4SplitMinInput.value || '').trim();
+  if (raw === '') {
+    v4.splitMinCount = null;
+  } else {
+    const n = parseInt(raw, 10);
+    v4.splitMinCount = Number.isFinite(n) && n >= 1 ? n : null;
+  }
+  v4.splitComparator = v4SplitComparatorSelect.value === 'gte' ? 'gte' : 'gt';
+  v4UpdateSplitRuleHint();
+}
+
+function v4SplitRuleText() {
+  if (v4.splitMinCount == null) return 'a valid property threshold';
+  const n = v4.splitMinCount.toLocaleString();
+  return v4.splitComparator === 'gte'
+    ? `at least ${n}`
+    : `more than ${n}`;
+}
+
+function v4SplitRuleSymbol() {
+  return v4.splitComparator === 'gte' ? '>=' : '>';
+}
+
+function v4SplitRuleSummary() {
+  if (v4.splitMinCount == null) return '';
+  return `${v4SplitRuleSymbol()} ${v4.splitMinCount.toLocaleString()} properties`;
+}
+
+function v4UpdateSplitRuleHint() {
+  const hint = document.getElementById('v4SplitRuleHint');
+  if (!hint) return;
+  hint.textContent = v4.splitMinCount == null
+    ? 'Enter a valid property threshold.'
+    : `Only non-blank attribute values with ${v4SplitRuleText()} properties are split out.`;
+}
+
+function v4BuildSplitBucketKey(sourceGroup, attrValue) {
+  return [sourceGroup, attrValue].join('\u0001');
+}
+
+function v4BucketQualifies(count, attrValue) {
+  if (!fmtVal(attrValue)) return false;
+  if (v4.splitMinCount == null) return false;
+  return v4.splitComparator === 'gte'
+    ? count >= v4.splitMinCount
+    : count > v4.splitMinCount;
+}
+
+function v4BucketReason(count, attrValue) {
+  if (!fmtVal(attrValue)) return 'Blank attribute value';
+  if (v4BucketQualifies(count, attrValue)) return `Meets ${v4SplitRuleSummary()}`;
+  return `Does not meet ${v4SplitRuleSummary()}`;
+}
+
+function v4BuildSplitImpact() {
+  v4ReadSplitSettings();
+  const buckets = new Map();
+  if (!v4.attributeCol || !v4.groupCol || v4.splitMinCount == null) {
+    v4.splitImpactRows = [];
+    v4.splitBucketKeys = new Set();
+    return v4.splitImpactRows;
+  }
+
+  for (const r of v4.largeGroupRows) {
+    const sourceGroup = fmtVal(r[v4.groupCol]);
+    if (!v4.largeGroups.has(sourceGroup)) continue;
+    const attrValue = fmtVal(r[v4.attributeCol]);
+    const key = v4BuildSplitBucketKey(sourceGroup, attrValue);
+    if (!buckets.has(key)) {
+      buckets.set(key, {
+        sourceGroup,
+        attrValue,
+        sourceCount: v4.largeGroups.get(sourceGroup) || 0,
+        count: 0,
+      });
+    }
+    buckets.get(key).count++;
+  }
+
+  v4.splitImpactRows = [...buckets.values()].map(row => {
+    const shouldSplit = v4BucketQualifies(row.count, row.attrValue);
+    return {
+      ...row,
+      shouldSplit,
+      reason: v4BucketReason(row.count, row.attrValue),
+    };
+  }).sort((a, b) => {
+    if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
+    const bySource = naturalCompare(a.sourceGroup, b.sourceGroup);
+    if (bySource !== 0) return bySource;
+    if (a.shouldSplit !== b.shouldSplit) return a.shouldSplit ? -1 : 1;
+    if (b.count !== a.count) return b.count - a.count;
+    return naturalCompare(a.attrValue, b.attrValue);
+  });
+
+  v4.splitBucketKeys = new Set(
+    v4.splitImpactRows
+      .filter(row => row.shouldSplit)
+      .map(row => v4BuildSplitBucketKey(row.sourceGroup, row.attrValue))
+  );
+  return v4.splitImpactRows;
+}
+
+function v4BuildImpactUI() {
+  const rows = v4BuildSplitImpact();
+  const splitBuckets = rows.filter(row => row.shouldSplit).length;
+  const splitRows = rows.reduce((sum, row) => sum + (row.shouldSplit ? row.count : 0), 0);
+  const largeRows = v4.largeGroupRows.length;
+  const keptRows = Math.max(0, largeRows - splitRows);
+
+  document.getElementById('v4ImpactTotalBuckets').textContent = rows.length.toLocaleString();
+  document.getElementById('v4ImpactSplitBuckets').textContent = splitBuckets.toLocaleString();
+  document.getElementById('v4ImpactSplitRows').textContent = splitRows.toLocaleString();
+  document.getElementById('v4ImpactKeptRows').textContent = keptRows.toLocaleString();
+
+  const warn = document.getElementById('v4ImpactWarn');
+  if (!v4.attributeCol) {
+    warn.textContent = 'Choose a split attribute before reviewing split impact.';
+    warn.classList.remove('hidden');
+  } else if (v4.splitMinCount == null) {
+    warn.textContent = 'Enter a valid split-bucket threshold.';
+    warn.classList.remove('hidden');
+  } else if (!rows.length) {
+    warn.textContent = 'No over-threshold asset groups are available to split.';
+    warn.classList.remove('hidden');
+  } else if (!splitBuckets) {
+    warn.textContent = `No attribute values meet ${v4SplitRuleSummary()}. Lower the split-bucket threshold or switch the rule to "At least" if exact-threshold buckets should split.`;
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+    warn.textContent = '';
+  }
+
+  document.getElementById('v4ImpactNext').disabled = !(v4.attributeCol && v4.splitMinCount != null && splitBuckets > 0);
+  v4RenderImpactTable(rows);
+}
+
+function v4RenderImpactTable(rows) {
+  const table = document.getElementById('v4ImpactTable');
+  const attrLabel = v4.attributeCol || 'selected attribute';
+  let html = '<thead><tr>' +
+    '<th>Current asset group</th>' +
+    `<th>${escapeHtml(attrLabel)}</th>` +
+    '<th style="text-align:right;">Source group count</th>' +
+    '<th style="text-align:right;">Bucket properties</th>' +
+    '<th>Action</th>' +
+    '<th>Reason</th>' +
+    '</tr></thead><tbody>';
+
+  if (!rows.length) {
+    html += '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--muted);">No split-impact rows to show.</td></tr>';
+  } else {
+    for (const row of rows.slice(0, 300)) {
+      const action = row.shouldSplit ? 'Split' : 'Keep original';
+      html += '<tr>' +
+        `<td>${escapeHtml(row.sourceGroup)}</td>` +
+        `<td>${escapeHtml(row.attrValue) || '<em style="color:var(--muted);">(blank)</em>'}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${row.sourceCount.toLocaleString()}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${row.count.toLocaleString()}</td>` +
+        `<td class="${row.shouldSplit ? 'highlight' : ''}" style="font-weight:600;">${action}</td>` +
+        `<td>${escapeHtml(row.reason)}</td>` +
+        '</tr>';
+    }
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  const wrap = table.parentElement;
+  const oldFoot = wrap.querySelector('.v4-impact-foot');
+  if (oldFoot) oldFoot.remove();
+  if (rows.length > 300) {
+    const foot = document.createElement('div');
+    foot.className = 'v4-impact-foot';
+    foot.style.cssText = 'padding:10px 14px;color:var(--muted);font-size:12px;text-align:center;background:#fafbfc;border-top:1px solid var(--border);';
+    foot.textContent = `Showing first 300 of ${rows.length.toLocaleString()} attribute-value buckets. Full mapping is in the download.`;
+    wrap.appendChild(foot);
+  }
+}
+
 /* ---------- insertion position ---------- */
-document.getElementById('v4PositionBack').addEventListener('click', () => setV4Step(3));
+document.getElementById('v4PositionBack').addEventListener('click', () => setV4Step(4));
 document.getElementById('v4GenerateBtn').addEventListener('click', v4GenerateGroups);
 document.getElementById('v4InsertPosition').addEventListener('change', e => {
   v4.insertIndex = parseInt(e.target.value, 10);
   v4UpdatePositionPreview();
 });
 
+function v4FirstQualifyingSplitRow() {
+  for (const r of v4.largeGroupRows) {
+    const sourceGroup = fmtVal(r[v4.groupCol]);
+    const attrValue = fmtVal(r[v4.attributeCol]);
+    if (v4.splitBucketKeys.has(v4BuildSplitBucketKey(sourceGroup, attrValue))) return r;
+  }
+  return v4.largeGroupRows[0];
+}
+
 function v4BuildPositionUI() {
-  const first = v4.largeGroupRows[0];
+  v4BuildSplitImpact();
+  const first = v4FirstQualifyingSplitRow();
   const parts = first ? v4SplitGroupName(fmtVal(first[v4.groupCol])) : [];
   const pieces = document.getElementById('v4PositionPieces');
   pieces.innerHTML = parts.length
@@ -4160,7 +4434,7 @@ function v4BuildPositionUI() {
 }
 
 function v4UpdatePositionPreview() {
-  const first = v4.largeGroupRows[0];
+  const first = v4FirstQualifyingSplitRow();
   const preview = first && v4.attributeCol && v4.insertIndex != null
     ? v4BuildNameWithInsertedAttribute(fmtVal(first[v4.groupCol]), fmtVal(first[v4.attributeCol]), v4.insertIndex)
     : '— choose an insertion point —';
@@ -4173,14 +4447,40 @@ function v4RenderLargeGroupsTable() {
     if (b[1] !== a[1]) return b[1] - a[1];
     return naturalCompare(a[0], b[0]);
   });
-  let html = '<thead><tr><th>Current asset group</th><th style="text-align:right;">Properties</th></tr></thead><tbody>';
+  const impactByGroup = new Map();
+  for (const row of v4.splitImpactRows) {
+    if (!impactByGroup.has(row.sourceGroup)) {
+      impactByGroup.set(row.sourceGroup, {
+        splitBuckets: 0,
+        splitRows: 0,
+        keptRows: row.sourceCount,
+      });
+    }
+    const impact = impactByGroup.get(row.sourceGroup);
+    if (row.shouldSplit) {
+      impact.splitBuckets++;
+      impact.splitRows += row.count;
+      impact.keptRows -= row.count;
+    }
+  }
+  let html = '<thead><tr>' +
+    '<th>Current asset group</th>' +
+    '<th style="text-align:right;">Properties</th>' +
+    '<th style="text-align:right;">Split buckets</th>' +
+    '<th style="text-align:right;">Rows split out</th>' +
+    '<th style="text-align:right;">Rows kept original</th>' +
+    '</tr></thead><tbody>';
   if (!entries.length) {
-    html += '<tr><td colspan="2" style="text-align:center; padding:20px; color:var(--muted);">No groups above threshold.</td></tr>';
+    html += '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--muted);">No groups above threshold.</td></tr>';
   } else {
     for (const [name, n] of entries.slice(0, 300)) {
+      const impact = impactByGroup.get(name) || { splitBuckets: 0, splitRows: 0, keptRows: n };
       html += '<tr>' +
         `<td>${escapeHtml(name)}</td>` +
         `<td style="text-align:right; font-variant-numeric:tabular-nums;">${n.toLocaleString()}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${impact.splitBuckets.toLocaleString()}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${impact.splitRows.toLocaleString()}</td>` +
+        `<td style="text-align:right; font-variant-numeric:tabular-nums;">${Math.max(0, impact.keptRows).toLocaleString()}</td>` +
         '</tr>';
     }
   }
@@ -4213,7 +4513,7 @@ function v4BuildNameWithInsertedAttribute(groupName, attrValue, insertIndex) {
 }
 
 /* ---------- generate + render ---------- */
-document.getElementById('v4BackToPosition').addEventListener('click', () => setV4Step(4));
+document.getElementById('v4BackToPosition').addEventListener('click', () => setV4Step(5));
 document.getElementById('v4DownloadXlsx').addEventListener('click', downloadV4Xlsx);
 
 function v4GenerateGroups() {
@@ -4221,29 +4521,24 @@ function v4GenerateGroups() {
     alert('Choose a V4 source and split attribute first.');
     return;
   }
+  v4BuildSplitImpact();
+  if (!v4.splitBucketKeys.size) {
+    alert('No attribute values meet the current split-bucket threshold. Lower the threshold or change the rule before forming V4.');
+    return;
+  }
   const v4Col = 'asset group v4';
   const sourceLarge = new Map(v4.largeGroups);
-  const mapping = new Map();
+  const splitBucketKeys = new Set(v4.splitBucketKeys);
   let splitRows = 0;
 
   v4.outputRows = v4.rows.map(r => {
     const before = fmtVal(r[v4.groupCol]);
+    const attrValue = fmtVal(r[v4.attributeCol]);
+    const bucketKey = v4BuildSplitBucketKey(before, attrValue);
     let after = before;
-    if (sourceLarge.has(before)) {
-      after = v4BuildNameWithInsertedAttribute(before, fmtVal(r[v4.attributeCol]), v4.insertIndex);
+    if (sourceLarge.has(before) && splitBucketKeys.has(bucketKey)) {
+      after = v4BuildNameWithInsertedAttribute(before, attrValue, v4.insertIndex);
       splitRows++;
-      const attrValue = fmtVal(r[v4.attributeCol]);
-      const key = [before, attrValue, after].join('\u0001');
-      if (!mapping.has(key)) {
-        mapping.set(key, {
-          sourceGroup: before,
-          attrValue,
-          targetGroup: after,
-          sourceCount: sourceLarge.get(before) || 0,
-          count: 0,
-        });
-      }
-      mapping.get(key).count++;
     }
     return { ...r, [v4Col]: after };
   });
@@ -4257,22 +4552,36 @@ function v4GenerateGroups() {
   let remainingLarge = 0;
   for (const n of v4Counts.values()) if (n > v4.threshold) remainingLarge++;
 
-  v4.mappingRows = [...mapping.values()].sort((a, b) => {
+  v4.mappingRows = v4.splitImpactRows.map(row => ({
+    sourceGroup: row.sourceGroup,
+    attrValue: row.attrValue,
+    targetGroup: row.shouldSplit
+      ? v4BuildNameWithInsertedAttribute(row.sourceGroup, row.attrValue, v4.insertIndex)
+      : row.sourceGroup,
+    sourceCount: row.sourceCount,
+    count: row.count,
+    splitApplied: row.shouldSplit,
+    reason: row.reason,
+    rule: v4SplitRuleSummary(),
+  })).sort((a, b) => {
     if (b.sourceCount !== a.sourceCount) return b.sourceCount - a.sourceCount;
     const bySource = naturalCompare(a.sourceGroup, b.sourceGroup);
     if (bySource !== 0) return bySource;
+    if (a.splitApplied !== b.splitApplied) return a.splitApplied ? -1 : 1;
+    if (b.count !== a.count) return b.count - a.count;
     return naturalCompare(a.attrValue, b.attrValue);
   });
+  const groupsSplit = new Set(v4.mappingRows.filter(row => row.splitApplied).map(row => row.sourceGroup));
 
   document.getElementById('v4StatRows').textContent = v4.outputRows.length.toLocaleString();
   document.getElementById('v4StatV3Groups').textContent = v4.groupCounts.size.toLocaleString();
-  document.getElementById('v4StatV3Large').textContent = sourceLarge.size.toLocaleString();
+  document.getElementById('v4StatV3Large').textContent = groupsSplit.size.toLocaleString();
   document.getElementById('v4StatV4Groups').textContent = v4Counts.size.toLocaleString();
   document.getElementById('v4StatSplitRows').textContent = splitRows.toLocaleString();
   document.getElementById('v4StatRemainingLarge').textContent = remainingLarge.toLocaleString();
 
   v4RenderPreviewTable();
-  setV4Step(5);
+  setV4Step(6);
 }
 
 function v4RenderPreviewTable() {
@@ -4281,20 +4590,24 @@ function v4RenderPreviewTable() {
     '<th>asset group v3</th>' +
     `<th>${escapeHtml(v4.attributeCol || 'inserted attribute')}</th>` +
     '<th>asset group v4</th>' +
+    '<th>split?</th>' +
     '<th style="text-align:right;">source group count</th>' +
     '<th style="text-align:right;">properties</th>' +
+    '<th>reason</th>' +
     '</tr></thead><tbody>';
 
   if (!v4.mappingRows.length) {
-    html += '<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--muted);">No V4 splits were generated.</td></tr>';
+    html += '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--muted);">No V4 mapping rows were generated.</td></tr>';
   } else {
     for (const row of v4.mappingRows.slice(0, 300)) {
       html += '<tr>' +
         `<td>${escapeHtml(row.sourceGroup)}</td>` +
         `<td>${escapeHtml(row.attrValue) || '<em style="color:var(--muted);">(blank)</em>'}</td>` +
         `<td class="highlight" style="font-weight:600;">${escapeHtml(row.targetGroup)}</td>` +
+        `<td>${row.splitApplied ? 'yes' : 'no'}</td>` +
         `<td style="text-align:right; font-variant-numeric:tabular-nums;">${row.sourceCount.toLocaleString()}</td>` +
         `<td style="text-align:right; font-variant-numeric:tabular-nums;">${row.count.toLocaleString()}</td>` +
+        `<td>${escapeHtml(row.reason || '')}</td>` +
         '</tr>';
     }
   }
@@ -4345,13 +4658,40 @@ function v4BuildPivotSheet() {
 }
 
 function v4BuildMappingSheet() {
-  const headers = ['asset group v3', v4.attributeCol || 'inserted attribute', 'asset group v4', 'source group count', 'count of properties'];
+  const headers = [
+    'asset group v3',
+    v4.attributeCol || 'inserted attribute',
+    'asset group v4',
+    'split applied?',
+    'source group count',
+    'count of properties',
+    'split rule',
+    'reason'
+  ];
   const aoa = [headers];
   for (const row of v4.mappingRows) {
-    aoa.push([row.sourceGroup, row.attrValue, row.targetGroup, row.sourceCount, row.count]);
+    aoa.push([
+      row.sourceGroup,
+      row.attrValue,
+      row.targetGroup,
+      row.splitApplied ? 'yes' : 'no',
+      row.sourceCount,
+      row.count,
+      row.rule || '',
+      row.reason || ''
+    ]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 70 }, { wch: 26 }, { wch: 78 }, { wch: 22 }, { wch: 22 }];
+  ws['!cols'] = [
+    { wch: 70 },
+    { wch: 26 },
+    { wch: 78 },
+    { wch: 16 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 32 }
+  ];
   return ws;
 }
 
