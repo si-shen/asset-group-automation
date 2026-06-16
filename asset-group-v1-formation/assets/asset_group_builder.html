@@ -725,6 +725,12 @@
 
         <div class="field-row" style="margin-top: 16px;">
           <div class="field">
+            <label for="v3PostcodeSelect">Postcode column</label>
+            <select id="v3PostcodeSelect"></select>
+            <div class="field-hint">Pick which column contains postcode (optional).</div>
+            <div class="field-hint" id="v3PostcodeSample"></div>
+          </div>
+          <div class="field">
             <label for="v3AgeBandSelect">Age Band</label>
             <select id="v3AgeBandSelect"></select>
             <div class="field-hint">Pick which attribute is the age band. Choose "None" if your data has no age band — in that case age-adjacency won't block a merge.</div>
@@ -759,14 +765,14 @@
 
       <div style="margin-bottom: 22px;">
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Merge priority</label>
-        <div class="field-hint" style="margin-bottom: 10px;">When a small group has multiple valid merge partners, choose which factor ranks candidates first.</div>
+        <div class="field-hint" style="margin-bottom: 10px;">Postcode is checked first. When a small group has multiple valid merge partners, choose how age band and tenure rank the remaining candidates.</div>
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
           <input type="radio" name="v3Prioritise" value="tenure" checked style="margin-top:3px;">
-          <span><strong>Tenure first</strong> (default) — prefer same/inclusive/paired tenure; use age band as tiebreaker.</span>
+          <span><strong>Tenure first</strong> (default) — after postcode, prefer same/inclusive/paired tenure; use age band as tiebreaker.</span>
         </label>
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer;">
           <input type="radio" name="v3Prioritise" value="ageband" style="margin-top:3px;">
-          <span><strong>Age band first</strong> — prefer the same/closest age band; use tenure as tiebreaker.</span>
+          <span><strong>Age band first</strong> — after postcode, prefer the same/closest age band; use tenure as tiebreaker.</span>
         </label>
       </div>
 
@@ -775,6 +781,13 @@
         <div class="field-hint" style="margin-bottom: 10px;">Pairs of tenure types that your organisation allows to combine (for example <code>AR</code> with <code>GN</code>).</div>
         <div id="v3TenurePairs"></div>
         <button class="btn" id="v3AddTenurePair" style="margin-top: 8px;">+ Add pair</button>
+      </div>
+
+      <div style="margin-bottom: 22px;">
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Tenure pairs that should never merge</label>
+        <div class="field-hint" style="margin-bottom: 10px;">Pairs of tenure types that must stay separate, even under inclusive asset groups (for example <code>GN</code> with <code>SHELT</code> blocks <code>GN</code> merging into <code>GN &amp; SHELT</code>).</div>
+        <div id="v3ExcludedTenureRows"></div>
+        <button class="btn" id="v3AddExcludedTenure" style="margin-top: 8px;">+ Add pair</button>
       </div>
 
       <div style="margin-bottom: 14px;">
@@ -1136,6 +1149,8 @@ const v3 = {
   priorSheets: [],          // workbook sheets carried forward from the previous step
   assetGroupCol: null,
   countCol: null,
+  sourceHeaders: [],        // headers from source rows before V3 auto-aggregation
+  sourceRows: [],           // original rows from source before V3 auto-aggregation
   // Property-level snapshot (when available): rows + headers from BEFORE
   // auto-aggregation, used to emit a property-level sheet with an
   // `asset group v3` column on download. Empty when V3 was given an
@@ -1146,14 +1161,18 @@ const v3 = {
   parsedPositionCount: 0,   // number of '|'-split pieces in the first asset-group name
   ageBandPos: null,         // 0-based index into the split, or null
   tenurePos: null,          // 0-based index into the split
+  postcodeCol: null,        // selected source column to pull postcodes from
   tenurePairRows: [],       // array of { t1, t2 } for the tenure-pair UI
+  excludedTenureRows: [],   // array of { t1, t2 } for the never-merge tenure pair UI
   threshold: 5,
   allowPrePost2000: false,
   includeInclusive: false,
-  prioritise: 'tenure',     // 'tenure' | 'ageband' — which factor ranks merge candidates first
+  blockedTenurePairSet: new Set(),
+  prioritise: 'tenure',     // 'tenure' | 'ageband' — tie-break after postcode matching
   processor: null,          // V3DataProcessor instance
   stats: null,
   uniqueTenures: [],
+  uniqueTenureTokens: [],
   validRowCount: 0,
 };
 
@@ -2418,8 +2437,11 @@ function v2HandoffToV3() {
   v3.priorSheets = v2BuildWorkbookSheets();
   v3.headers = [assetCol, countCol];
   v3.rows = rows;
+  v3.sourceHeaders = v2.headers && v2.headers.length ? [...v2.headers] : [...v3.headers];
+  v3.sourceRows = v2.mergedRows.map(r => ({ ...r }));
   v3.assetGroupCol = assetCol;
   v3.countCol = countCol;
+  v3.postcodeCol = null;
   // Snapshot the property-level rows so the V3 export can emit a
   // properties sheet with an "asset group v3" column added next to v2.
   // V2 puts asset-group-v2 right after the original headers, so this
@@ -2431,6 +2453,8 @@ function v2HandoffToV3() {
   v3.ageBandPos = null;
   v3.tenurePos = null;
   v3.tenurePairRows = [];
+  v3.excludedTenureRows = [];
+  v3.blockedTenurePairSet = new Set();
 
   document.getElementById('v3DropZone').classList.add('hidden');
   document.getElementById('v3FileInfo').classList.remove('hidden');
@@ -2653,10 +2677,21 @@ class AssetGroupMerger {
     this.tenurePairs = {};
     this.allowPrePost2000 = false;
     this.prioritise = 'tenure';
+    this.postcodePriority = false;
+    this.blockedTenurePairs = new Set();
   }
   setTenurePairs(pairs) { this.tenurePairs = pairs || {}; }
   setAllowPrePost2000(flag) { this.allowPrePost2000 = !!flag; }
   setPrioritise(mode) { this.prioritise = mode === 'ageband' ? 'ageband' : 'tenure'; }
+  setPostcodePriority(flag) { this.postcodePriority = !!flag; }
+  setBlockedTenurePairs(pairs) {
+    this.blockedTenurePairs = new Set();
+    for (const pair of (pairs || [])) {
+      const a = this._canonicalTenureToken(Array.isArray(pair) ? pair[0] : pair.t1);
+      const b = this._canonicalTenureToken(Array.isArray(pair) ? pair[1] : pair.t2);
+      if (a && b && a !== b) this.blockedTenurePairs.add(this._tenurePairKey(a, b));
+    }
+  }
 
   static parseAgeBand(band) {
     if (band == null) return null;
@@ -2693,11 +2728,38 @@ class AssetGroupMerger {
   _splitCompoundTenure(t) {
     return new Set(String(t).split('&').map(x => x.trim()).filter(x => x.length));
   }
+  _canonicalTenureToken(t) {
+    return String(t ?? '').trim().toLowerCase();
+  }
+  _tenurePairKey(a, b) {
+    const tokens = [this._canonicalTenureToken(a), this._canonicalTenureToken(b)].sort();
+    return `${tokens[0]}||${tokens[1]}`;
+  }
+  _canonicalPostcode(pc) {
+    return String(pc ?? '').replace(/\s+/g, '').trim().toUpperCase();
+  }
   _isTenureInclusive(t1, t2) {
     const c1 = this._splitCompoundTenure(t1);
     const c2 = this._splitCompoundTenure(t2);
     for (const x of c2) if (!c1.has(x)) return false;
     return true;
+  }
+  _hasBlockedTenurePair(t1, t2) {
+    if (!this.blockedTenurePairs.size) return false;
+    const left = [...this._splitCompoundTenure(t1)].map(x => this._canonicalTenureToken(x));
+    const right = [...this._splitCompoundTenure(t2)].map(x => this._canonicalTenureToken(x));
+    for (const a of left) {
+      for (const b of right) {
+        if (a && b && a !== b && this.blockedTenurePairs.has(this._tenurePairKey(a, b))) return true;
+      }
+    }
+    return false;
+  }
+  _canMergeInclusively(t1, t2) {
+    return (
+      (this._isTenureInclusive(t1, t2) || this._isTenureInclusive(t2, t1)) &&
+      !this._hasBlockedTenurePair(t1, t2)
+    );
   }
   _getAgeBandOrder(b) {
     const p = AssetGroupMerger.parseAgeBand(b);
@@ -2712,13 +2774,15 @@ class AssetGroupMerger {
 
   canMergeTenure(t1, t2) {
     if (t1 === t2) return true;
-    if (this._isTenureInclusive(t1, t2) || this._isTenureInclusive(t2, t1)) return true;
+    if (this._hasBlockedTenurePair(t1, t2)) return false;
+    if (this._canMergeInclusively(t1, t2)) return true;
     const pairs = this.tenurePairs[t1];
     return !!(pairs && pairs.indexOf(t2) >= 0);
   }
   getTenureMergeScore(t1, t2) {
-    if (this._isTenureInclusive(t1, t2) || this._isTenureInclusive(t2, t1)) return 3;
-    if (t1 === t2) return 2;
+    if (t1 === t2) return 3;
+    if (this._hasBlockedTenurePair(t1, t2)) return 0;
+    if (this._canMergeInclusively(t1, t2)) return 3;
     const pairs = this.tenurePairs[t1];
     if (pairs && pairs.indexOf(t2) >= 0) return 1;
     return 0;
@@ -2802,8 +2866,9 @@ class AssetGroupMerger {
 
   rankMergeCandidates(smallGroup, candidates) {
     // Strict tier ordering — each tier dominates everything below it.
-    //   tenure-first:  TENURE score  >  AGE-BAND preference  >  smaller partner
-    //   ageband-first: AGE-BAND preference  >  TENURE score  >  smaller partner
+    //   postcode is always checked first.
+    //   tenure-first:  postcode match  >  TENURE score  >  AGE-BAND preference  >  smaller partner
+    //   ageband-first: postcode match  >  AGE-BAND preference  >  TENURE score  >  smaller partner
     // Property count is NOT part of the score — it's only a final
     // tiebreaker — so a paired-tenure same-band candidate always beats
     // a paired-tenure adjacent-band candidate regardless of group size.
@@ -2811,11 +2876,18 @@ class AssetGroupMerger {
     // adjacency is guaranteed — no need to re-check it here.)
     const ageFirst = this.prioritise === 'ageband';
     const W = ageFirst
-      ? { age: 1_000_000, tenure: 10_000 }
-      : { tenure: 1_000_000, age: 10_000 };
+      ? { age: 100_000, tenure: 10_000, postcode: 10_000_000_000 }
+      : { tenure: 100_000, age: 10_000, postcode: 10_000_000_000 };
 
     const ranked = candidates.map(c => {
+      const postcodeMatch = this.postcodePriority &&
+        smallGroup.postcode &&
+        c.group.postcode &&
+        this._canonicalPostcode(smallGroup.postcode) === this._canonicalPostcode(c.group.postcode)
+        ? 1
+        : 0;
       const score =
+        postcodeMatch * W.postcode +
         this.getTenureMergeScore(smallGroup.tenure, c.group.tenure) * W.tenure +
         this.getAgeBandPreferenceScore(smallGroup.ageBand, c.group.ageBand) * W.age;
       return { candidate: c, score };
@@ -2878,11 +2950,13 @@ class AssetGroupMerger {
 
 /* ---------- data processor (ported from DataProcessor) ---------- */
 class V3DataProcessor {
-  constructor(rows, assetGroupCol, countCol, ageBandPos, tenurePos) {
+  constructor(rows, assetGroupCol, countCol, ageBandPos, tenurePos, postcodeCol, postcodeLookup) {
     this.assetGroupCol = assetGroupCol;
     this.countCol = countCol;
     this.ageBandPos = ageBandPos;
     this.tenurePos = tenurePos;
+    this.postcodeCol = postcodeCol;
+    this.postcodeLookup = postcodeLookup || new Map();
     this.merger = new AssetGroupMerger();
     this.groups = rows.map((r, i) => {
       const originalAssetGroup = String(r[assetGroupCol] ?? '').trim();
@@ -2891,11 +2965,14 @@ class V3DataProcessor {
         ? ((parts[ageBandPos] ?? '').trim() || 'Unknown')
         : 'Unknown';
       const tenure = (parts[tenurePos] ?? '').trim();
+      const groupName = this._normalizeGroupName(originalAssetGroup);
+      const lookupPostcode = this.postcodeLookup.get(groupName);
+      const postcode = lookupPostcode ? this._canonicalPostcode(lookupPostcode) : this._canonicalPostcode(r[postcodeCol]);
       const propertiesRaw = r[countCol];
       const properties = typeof propertiesRaw === 'number'
         ? propertiesRaw
         : (Number(String(propertiesRaw).replace(/,/g, '')) || 0);
-      const canonicalOriginal = parts.join(' | ');
+      const canonicalOriginal = groupName;
       return {
         idx: i,
         originalAssetGroup: canonicalOriginal,
@@ -2906,6 +2983,7 @@ class V3DataProcessor {
         ageBandPos,
         tenurePos,
         properties,
+        postcode,
         mergedAssetGroup: canonicalOriginal,
         mergeSource: null,
         rowRef: r,
@@ -2916,6 +2994,14 @@ class V3DataProcessor {
   setTenurePairs(pairs) { this.merger.setTenurePairs(pairs); }
   setAllowPrePost2000(flag) { this.merger.setAllowPrePost2000(flag); }
   setPrioritise(mode) { this.merger.setPrioritise(mode); }
+  setBlockedTenurePairs(pairs) { this.merger.setBlockedTenurePairs(pairs); }
+  setPostcodePriority(enabled) { this.merger.setPostcodePriority(enabled); }
+  _canonicalPostcode(value) {
+    return String(value ?? '').replace(/\s+/g, '').trim().toUpperCase();
+  }
+  _normalizeGroupName(value) {
+    return String(value ?? '').split('|').map(p => p.trim()).join(' | ');
+  }
 
   identifySmallGroups(threshold) {
     return this.groups.filter(g => g.properties < threshold);
@@ -3020,7 +3106,7 @@ class V3DataProcessor {
           if (parts1[k] !== parts2[k]) { ok = false; break; }
         }
         if (!ok) continue;
-        if (!this.merger._isTenureInclusive(g1.tenure, g2.tenure)) continue;
+        if (!this.merger._canMergeInclusively(g1.tenure, g2.tenure)) continue;
         const mergedName = this.merger.generateMergedName(g1, g2);
         let mainIdx, mergeIdx;
         if (g1.tenure.indexOf('&') !== -1) { mainIdx = i; mergeIdx = j; }
@@ -3054,6 +3140,12 @@ document.getElementById('v3ChangeFile').addEventListener('click', () => {
   document.getElementById('v3FileInfo').classList.add('hidden');
   document.getElementById('v3DropZone').classList.remove('hidden');
   v3FileInput.value = '';
+  v3.tenurePairRows = [];
+  v3.excludedTenureRows = [];
+  v3.blockedTenurePairSet = new Set();
+  v3.sourceHeaders = [];
+  v3.sourceRows = [];
+  v3.postcodeCol = null;
   v3HideAggregateNotice();
 });
 
@@ -3065,7 +3157,13 @@ async function v3HandleFile(file) {
     v3.sheetName = sheetName;
     v3.priorSheets = [];
     v3.headers = headers;
+    v3.sourceHeaders = [...headers];
     v3.rows = rows;
+    v3.sourceRows = rows.map(r => ({ ...r }));
+    v3.tenurePairRows = [];
+    v3.excludedTenureRows = [];
+    v3.blockedTenurePairSet = new Set();
+    v3.postcodeCol = null;
 
     document.getElementById('v3FileName').textContent = file.name;
     document.getElementById('v3DropZone').classList.add('hidden');
@@ -3079,6 +3177,9 @@ async function v3HandleFile(file) {
       v3.propertyHeaders = [...headers];
       v3.linkColumn = detection.agCol;
       v3ApplyAutoAggregate(detection);
+      v3.tenurePairRows = [];
+      v3.excludedTenureRows = [];
+      v3.blockedTenurePairSet = new Set();
       document.getElementById('v3FileSummary').innerHTML =
         `${detection.propertyCount.toLocaleString()} property rows · auto-aggregated to ` +
         `<strong>${detection.groupCount.toLocaleString()} asset groups</strong> · sheet "${escapeHtml(sheetName)}"`;
@@ -3088,6 +3189,9 @@ async function v3HandleFile(file) {
       v3.propertyRows = [];
       v3.propertyHeaders = [];
       v3.linkColumn = null;
+      v3.tenurePairRows = [];
+      v3.excludedTenureRows = [];
+      v3.blockedTenurePairSet = new Set();
       document.getElementById('v3FileSummary').textContent =
         `${rows.length.toLocaleString()} rows · ${headers.length} columns · sheet "${sheetName}"`;
       v3HideAggregateNotice();
@@ -3173,8 +3277,10 @@ function v3HideAggregateNotice() {
 function v3PopulateColumnSelectors() {
   const agSel = document.getElementById('v3AssetGroupSelect');
   const ctSel = document.getElementById('v3CountSelect');
+  const pcSel = document.getElementById('v3PostcodeSelect');
   agSel.innerHTML = '';
   ctSel.innerHTML = '';
+  pcSel.innerHTML = '';
 
   const placeholder = (text) => {
     const o = document.createElement('option');
@@ -3192,6 +3298,16 @@ function v3PopulateColumnSelectors() {
     o2.value = h; o2.textContent = h;
     ctSel.appendChild(o2);
   });
+  const pcHeaders = (v3.sourceHeaders && v3.sourceHeaders.length) ? v3.sourceHeaders : v3.headers;
+  pcSel.appendChild(placeholder('None / not in this file'));
+  const pcSeen = new Set();
+  for (const h of pcHeaders) {
+    if (pcSeen.has(h)) continue;
+    pcSeen.add(h);
+    const o3 = document.createElement('option');
+    o3.value = h; o3.textContent = h;
+    pcSel.appendChild(o3);
+  }
 
   let agGuess = v3.headers.find(h => /asset\s*group/i.test(h));
   if (!agGuess) {
@@ -3218,13 +3334,20 @@ function v3PopulateColumnSelectors() {
       return total > 0 && numeric / total > 0.8;
     });
   }
+  let pcGuess = '';
+  if (v3.sourceHeaders && v3.sourceHeaders.length) {
+    pcGuess = v3.sourceHeaders.find(h => /post.*code|postcode|postal/i.test(h)) || '';
+  }
 
   agSel.value = agGuess || '';
   ctSel.value = ctGuess || '';
+  pcSel.value = pcGuess || '';
   v3.assetGroupCol = agGuess || null;
   v3.countCol = ctGuess || null;
+  v3.postcodeCol = pcSel.value || null;
   v3UpdateColumnHint('asset');
   v3UpdateColumnHint('count');
+  v3UpdateColumnHint('postcode');
   v3UpdateParsedPreview();
 
   agSel.onchange = () => {
@@ -3237,14 +3360,29 @@ function v3PopulateColumnSelectors() {
     v3UpdateColumnHint('count');
     v3UpdateContinueEnabled();
   };
+  pcSel.onchange = () => {
+    v3.postcodeCol = pcSel.value || null;
+    v3UpdateColumnHint('postcode');
+    v3UpdateRowFilterWarn();
+  };
 }
 
 function v3UpdateColumnHint(which) {
-  const col = which === 'asset' ? v3.assetGroupCol : v3.countCol;
-  const target = document.getElementById(which === 'asset' ? 'v3AssetGroupSample' : 'v3CountSample');
+  const col = which === 'asset'
+    ? v3.assetGroupCol
+    : which === 'count'
+      ? v3.countCol
+      : v3.postcodeCol;
+  const targetId = which === 'asset'
+    ? 'v3AssetGroupSample'
+    : which === 'count'
+      ? 'v3CountSample'
+      : 'v3PostcodeSample';
+  const target = document.getElementById(targetId);
   if (!col) { target.textContent = ''; return; }
+  const sourceRows = (which === 'postcode' && v3.sourceRows && v3.sourceRows.length) ? v3.sourceRows : v3.rows;
   const samples = [];
-  for (const r of v3.rows) {
+  for (const r of sourceRows) {
     const v = fmtVal(r[col]);
     if (v && !samples.includes(v)) samples.push(v);
     if (samples.length >= 3) break;
@@ -3374,13 +3512,24 @@ document.getElementById('v3GoToConsolidate').addEventListener('click', () => {
 /* ---------- V3 UI: configure & consolidate ---------- */
 function v3CollectUniqueTenures() {
   const set = new Set();
+  const tokenMap = new Map();
   for (const r of v3ValidRows()) {
     const s = String(r[v3.assetGroupCol] ?? '').trim();
     const parts = s.split('|').map(p => p.trim());
     const t = (parts[v3.tenurePos] ?? '').trim();
-    if (t) set.add(t);
+    if (t) {
+      set.add(t);
+      t.split('&')
+        .map(x => x.trim())
+        .filter(x => x)
+        .forEach(x => {
+          const key = x.toLowerCase();
+          if (!tokenMap.has(key)) tokenMap.set(key, x);
+        });
+    }
   }
   v3.uniqueTenures = [...set].sort(naturalCompare);
+  v3.uniqueTenureTokens = [...tokenMap.values()].sort(naturalCompare);
 }
 
 function v3BuildTenurePairUI() {
@@ -3389,6 +3538,19 @@ function v3BuildTenurePairUI() {
     v3.tenurePairRows = [{ t1: v3.uniqueTenures[0] || '', t2: v3.uniqueTenures[1] || '' }];
   }
   v3RenderTenurePairs();
+  const validBlockedTokens = new Set(v3.uniqueTenureTokens.map(t => t.toLowerCase()));
+  v3.excludedTenureRows = v3.excludedTenureRows.map(row => ({
+    t1: row.t1 != null ? row.t1 : (row.tenure || ''),
+    t2: row.t2 != null ? row.t2 : '',
+  })).filter(row => {
+    const a = String(row.t1 || '').trim().toLowerCase();
+    const b = String(row.t2 || '').trim().toLowerCase();
+    return (!a || validBlockedTokens.has(a)) && (!b || validBlockedTokens.has(b));
+  });
+  if (!v3.excludedTenureRows.length) {
+    v3.excludedTenureRows = [{ t1: '', t2: '' }];
+  }
+  v3RenderExcludedTenures();
 }
 
 function v3RenderTenurePairs() {
@@ -3427,6 +3589,55 @@ document.getElementById('v3AddTenurePair').addEventListener('click', () => {
   v3RenderTenurePairs();
 });
 
+function v3RenderExcludedTenures() {
+  const host = document.getElementById('v3ExcludedTenureRows');
+  if (!host) return;
+  host.innerHTML = '';
+  v3.excludedTenureRows.forEach((row, i) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:grid; grid-template-columns: 1fr 1fr auto; gap:8px; margin-bottom:8px; align-items:center;';
+
+    const makeSelect = (value, onChange) => {
+      const sel = document.createElement('select');
+      sel.style.cssText = 'padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; background:white;';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '- choose tenure -';
+      sel.appendChild(placeholder);
+      v3.uniqueTenureTokens.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        sel.appendChild(opt);
+      });
+      sel.value = value || '';
+      sel.onchange = () => onChange(sel.value);
+      return sel;
+    };
+    const sel1 = makeSelect(row.t1, value => { row.t1 = value; });
+    const sel2 = makeSelect(row.t2, value => { row.t2 = value; });
+
+    const rm = document.createElement('button');
+    rm.className = 'btn-ghost btn';
+    rm.textContent = 'Remove';
+    rm.onclick = () => {
+      v3.excludedTenureRows.splice(i, 1);
+      if (!v3.excludedTenureRows.length) v3.excludedTenureRows.push({ t1: '', t2: '' });
+      v3RenderExcludedTenures();
+    };
+
+    wrap.appendChild(sel1);
+    wrap.appendChild(sel2);
+    wrap.appendChild(rm);
+    host.appendChild(wrap);
+  });
+}
+
+document.getElementById('v3AddExcludedTenure').addEventListener('click', () => {
+  v3.excludedTenureRows.push({ t1: '', t2: '' });
+  v3RenderExcludedTenures();
+});
+
 const v3ThresholdInput = document.getElementById('v3Threshold');
 v3ThresholdInput.addEventListener('input', () => {
   v3.threshold = parseInt(v3ThresholdInput.value, 10) || 5;
@@ -3461,6 +3672,48 @@ function v3CollectTenurePairs() {
   return pairs;
 }
 
+function v3CollectBlockedTenurePairs() {
+  const normalized = new Set();
+  const pairs = [];
+  for (const row of v3.excludedTenureRows) {
+    const a = String(row.t1 || '').trim();
+    const b = String(row.t2 || '').trim();
+    if (!a || !b || a.toLowerCase() === b.toLowerCase()) continue;
+    const key = [a.toLowerCase(), b.toLowerCase()].sort().join('||');
+    if (normalized.has(key)) continue;
+    normalized.add(key);
+    pairs.push({ t1: a, t2: b });
+  }
+  v3.blockedTenurePairSet = normalized;
+  return pairs;
+}
+
+function v3BuildPostcodeLookup() {
+  if (!v3.postcodeCol) return new Map();
+
+  const sourceRows = v3.sourceRows && v3.sourceRows.length ? v3.sourceRows : [];
+  if (!sourceRows.length) return new Map();
+
+  const sourceGroupCol = v3.linkColumn || v3.assetGroupCol;
+  if (!sourceGroupCol) return new Map();
+
+  const normalize = (v) => String(v ?? '').trim().replace(/\s+/g, '').toUpperCase();
+  const normalizeGroup = (v) => String(v ?? '').split('|').map(x => x.trim()).join(' | ');
+  const out = new Map();
+  for (const r of sourceRows) {
+    const groupName = normalizeGroup(r[sourceGroupCol]);
+    if (!groupName) continue;
+    const nextCode = normalize(r[v3.postcodeCol]);
+    const existing = out.get(groupName);
+    if (!out.has(groupName)) {
+      out.set(groupName, nextCode);
+    } else if (existing !== nextCode) {
+      out.set(groupName, '');
+    }
+  }
+  return out;
+}
+
 function v3RunConsolidation() {
   const validRows = v3ValidRows();
   if (!validRows.length) {
@@ -3468,10 +3721,22 @@ function v3RunConsolidation() {
     return;
   }
   const pairs = v3CollectTenurePairs();
-  v3.processor = new V3DataProcessor(validRows, v3.assetGroupCol, v3.countCol, v3.ageBandPos, v3.tenurePos);
+  const blockedTenurePairs = v3CollectBlockedTenurePairs();
+  const postcodeLookup = v3BuildPostcodeLookup();
+  v3.processor = new V3DataProcessor(
+    validRows,
+    v3.assetGroupCol,
+    v3.countCol,
+    v3.ageBandPos,
+    v3.tenurePos,
+    v3.postcodeCol,
+    postcodeLookup
+  );
   v3.processor.setTenurePairs(pairs);
   v3.processor.setAllowPrePost2000(v3.allowPrePost2000);
   v3.processor.setPrioritise(v3.prioritise);
+  v3.processor.setBlockedTenurePairs(blockedTenurePairs);
+  v3.processor.setPostcodePriority(v3.postcodeCol && postcodeLookup.size > 0);
   v3.stats = v3.processor.applyMerges(v3.threshold, v3.includeInclusive);
 
   const groups = v3.processor.groups;
