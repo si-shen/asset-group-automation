@@ -727,7 +727,7 @@
           <div class="field">
             <label for="v3PostcodeSelect">Postcode column</label>
             <select id="v3PostcodeSelect"></select>
-            <div class="field-hint">Pick which column contains postcode (optional).</div>
+            <div class="field-hint">Pick the postcode column from the property/stock-list rows (optional).</div>
             <div class="field-hint" id="v3PostcodeSample"></div>
           </div>
           <div class="field">
@@ -765,14 +765,14 @@
 
       <div style="margin-bottom: 22px;">
         <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Merge priority</label>
-        <div class="field-hint" style="margin-bottom: 10px;">Postcode is checked first. When a small group has multiple valid merge partners, choose how age band and tenure rank the remaining candidates.</div>
+        <div class="field-hint" style="margin-bottom: 10px;">Shared postcodes are checked first. When a small group has multiple valid merge partners, choose how age band and tenure rank the remaining candidates.</div>
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer; margin-bottom:6px;">
           <input type="radio" name="v3Prioritise" value="tenure" checked style="margin-top:3px;">
-          <span><strong>Tenure first</strong> (default) — after postcode, prefer same/inclusive/paired tenure; use age band as tiebreaker.</span>
+          <span><strong>Tenure first</strong> (default) — after shared postcode, prefer same/inclusive/paired tenure; use age band as tiebreaker.</span>
         </label>
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; cursor:pointer;">
           <input type="radio" name="v3Prioritise" value="ageband" style="margin-top:3px;">
-          <span><strong>Age band first</strong> — after postcode, prefer the same/closest age band; use tenure as tiebreaker.</span>
+          <span><strong>Age band first</strong> — after shared postcode, prefer the same/closest age band; use tenure as tiebreaker.</span>
         </label>
       </div>
 
@@ -1383,6 +1383,20 @@ function buildRowsFromAoa(aoa, headerRowIndex) {
     rows.push(obj);
   }
   return { headers, rows, warnings: { emptyCount, dupCount } };
+}
+
+function parseWorkbookSheetRows(workbook, sheetName) {
+  const ws = workbook && workbook.Sheets ? workbook.Sheets[sheetName] : null;
+  if (!ws) return null;
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false, blankrows: true });
+  while (aoa.length && (!aoa[aoa.length - 1] || aoa[aoa.length - 1].every(c => c == null || String(c).trim() === ''))) {
+    aoa.pop();
+  }
+  if (!aoa.length) return null;
+  const headerRowIndex = detectHeaderRow(aoa);
+  const parsed = buildRowsFromAoa(aoa, headerRowIndex);
+  if (!parsed.rows.length) return null;
+  return { sheetName, ...parsed };
 }
 
 /* Modal: present preview of the first ~15 rows, let user pick the header row.
@@ -2738,6 +2752,13 @@ class AssetGroupMerger {
   _canonicalPostcode(pc) {
     return String(pc ?? '').replace(/\s+/g, '').trim().toUpperCase();
   }
+  _groupsSharePostcode(g1, g2) {
+    if (!this.postcodePriority || !g1.postcodes || !g2.postcodes) return false;
+    for (const pc of g1.postcodes) {
+      if (pc && g2.postcodes.has(pc)) return true;
+    }
+    return false;
+  }
   _isTenureInclusive(t1, t2) {
     const c1 = this._splitCompoundTenure(t1);
     const c2 = this._splitCompoundTenure(t2);
@@ -2866,9 +2887,9 @@ class AssetGroupMerger {
 
   rankMergeCandidates(smallGroup, candidates) {
     // Strict tier ordering — each tier dominates everything below it.
-    //   postcode is always checked first.
-    //   tenure-first:  postcode match  >  TENURE score  >  AGE-BAND preference  >  smaller partner
-    //   ageband-first: postcode match  >  AGE-BAND preference  >  TENURE score  >  smaller partner
+    //   shared postcode is always checked first.
+    //   tenure-first:  shared postcode  >  TENURE score  >  AGE-BAND preference  >  smaller partner
+    //   ageband-first: shared postcode  >  AGE-BAND preference  >  TENURE score  >  smaller partner
     // Property count is NOT part of the score — it's only a final
     // tiebreaker — so a paired-tenure same-band candidate always beats
     // a paired-tenure adjacent-band candidate regardless of group size.
@@ -2880,24 +2901,47 @@ class AssetGroupMerger {
       : { tenure: 100_000, age: 10_000, postcode: 10_000_000_000 };
 
     const ranked = candidates.map(c => {
-      const postcodeMatch = this.postcodePriority &&
-        smallGroup.postcode &&
-        c.group.postcode &&
-        this._canonicalPostcode(smallGroup.postcode) === this._canonicalPostcode(c.group.postcode)
-        ? 1
-        : 0;
+      const postcodeMatch = this._groupsSharePostcode(smallGroup, c.group) ? 1 : 0;
+      const tenureScore = this.getTenureMergeScore(smallGroup.tenure, c.group.tenure);
+      const ageScore = this.getAgeBandPreferenceScore(smallGroup.ageBand, c.group.ageBand);
       const score =
         postcodeMatch * W.postcode +
-        this.getTenureMergeScore(smallGroup.tenure, c.group.tenure) * W.tenure +
-        this.getAgeBandPreferenceScore(smallGroup.ageBand, c.group.ageBand) * W.age;
-      return { candidate: c, score };
+        tenureScore * W.tenure +
+        ageScore * W.age;
+      return { candidate: c, score, postcodeMatch, tenureScore, ageScore };
     });
     ranked.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       // Final tiebreaker: prefer the smaller partner.
       return a.candidate.group.properties - b.candidate.group.properties;
     });
+    this._annotateMergeRationales(ranked);
     return ranked;
+  }
+
+  _annotateMergeRationales(ranked) {
+    if (!ranked.length) return;
+    const primaryKey = this.prioritise === 'ageband' ? 'ageScore' : 'tenureScore';
+    const secondaryKey = this.prioritise === 'ageband' ? 'tenureScore' : 'ageScore';
+    const primaryLabel = this.prioritise === 'ageband' ? 'Age band priority' : 'Tenure priority';
+    const secondaryLabel = this.prioritise === 'ageband' ? 'Tenure priority' : 'Age band priority';
+
+    for (const item of ranked) {
+      const samePostcodeTier = ranked.filter(x => x.postcodeMatch === item.postcodeMatch);
+      const samePrimaryTier = samePostcodeTier.filter(x => x[primaryKey] === item[primaryKey]);
+
+      if (ranked.length === 1) {
+        item.candidate.mergeRationale = 'Only valid candidate';
+      } else if (item.postcodeMatch && ranked.some(x => x.postcodeMatch < item.postcodeMatch)) {
+        item.candidate.mergeRationale = 'Shared postcode';
+      } else if (samePostcodeTier.some(x => x[primaryKey] < item[primaryKey])) {
+        item.candidate.mergeRationale = primaryLabel;
+      } else if (samePrimaryTier.some(x => x[secondaryKey] < item[secondaryKey])) {
+        item.candidate.mergeRationale = secondaryLabel;
+      } else {
+        item.candidate.mergeRationale = 'Smaller group tie-break';
+      }
+    }
   }
 
   findMergeCandidates(allGroups, smallGroups) {
@@ -2966,8 +3010,10 @@ class V3DataProcessor {
         : 'Unknown';
       const tenure = (parts[tenurePos] ?? '').trim();
       const groupName = this._normalizeGroupName(originalAssetGroup);
-      const lookupPostcode = this.postcodeLookup.get(groupName);
-      const postcode = lookupPostcode ? this._canonicalPostcode(lookupPostcode) : this._canonicalPostcode(r[postcodeCol]);
+      const lookupPostcodes = this.postcodeLookup.get(groupName);
+      const postcodes = this._canonicalPostcodeSet(
+        lookupPostcodes && lookupPostcodes.size ? lookupPostcodes : [r[postcodeCol]]
+      );
       const propertiesRaw = r[countCol];
       const properties = typeof propertiesRaw === 'number'
         ? propertiesRaw
@@ -2983,9 +3029,10 @@ class V3DataProcessor {
         ageBandPos,
         tenurePos,
         properties,
-        postcode,
+        postcodes,
         mergedAssetGroup: canonicalOriginal,
         mergeSource: null,
+        mergeRationale: null,
         rowRef: r,
       };
     });
@@ -2998,6 +3045,14 @@ class V3DataProcessor {
   setPostcodePriority(enabled) { this.merger.setPostcodePriority(enabled); }
   _canonicalPostcode(value) {
     return String(value ?? '').replace(/\s+/g, '').trim().toUpperCase();
+  }
+  _canonicalPostcodeSet(values) {
+    const out = new Set();
+    for (const value of (values || [])) {
+      const pc = this._canonicalPostcode(value);
+      if (pc) out.add(pc);
+    }
+    return out;
   }
   _normalizeGroupName(value) {
     return String(value ?? '').split('|').map(p => p.trim()).join(' | ');
@@ -3037,6 +3092,7 @@ class V3DataProcessor {
     for (const g of this.groups) {
       g.mergedAssetGroup = g.originalAssetGroup;
       g.mergeSource = null;
+      g.mergeRationale = null;
     }
     const stats = {
       smallGroupsMerged: 0,
@@ -3062,6 +3118,8 @@ class V3DataProcessor {
       this.groups[targetIdx].mergedAssetGroup = verified;
       this.groups[smallIdx].mergeSource = sourceLabel;
       this.groups[targetIdx].mergeSource = sourceLabel;
+      this.groups[smallIdx].mergeRationale = best.mergeRationale || '';
+      this.groups[targetIdx].mergeRationale = best.mergeRationale || '';
       stats.smallGroupsMerged += 2;
     }
 
@@ -3081,6 +3139,8 @@ class V3DataProcessor {
           this.groups[mainIdx].mergedAssetGroup = verified;
           this.groups[mergeIdx].mergeSource = 'Inclusive Tenure';
           this.groups[mainIdx].mergeSource = 'Inclusive Tenure';
+          this.groups[mergeIdx].mergeRationale = 'Inclusive tenure merge';
+          this.groups[mainIdx].mergeRationale = 'Inclusive tenure merge';
           stats.inclusiveGroupsMerged += 2;
         }
       }
@@ -3185,15 +3245,29 @@ async function v3HandleFile(file) {
         `<strong>${detection.groupCount.toLocaleString()} asset groups</strong> · sheet "${escapeHtml(sheetName)}"`;
       v3ShowAggregateNotice(detection, 'upload');
     } else {
-      // Already-aggregated input — no property rows to enrich.
-      v3.propertyRows = [];
-      v3.propertyHeaders = [];
-      v3.linkColumn = null;
+      // Already-aggregated input. If the workbook also contains a stock/property
+      // list tab, use that tab for postcode-set lookup and property-level export.
+      const aggregateGroupCol = v3FindAssetGroupColumn(headers, rows, null);
+      const stockSheet = v3FindWorkbookPropertySheet(workbook, sheetName, aggregateGroupCol);
+      if (stockSheet) {
+        v3.propertyRows = stockSheet.rows.map(r => ({ ...r }));
+        v3.propertyHeaders = [...stockSheet.headers];
+        v3.sourceRows = stockSheet.rows.map(r => ({ ...r }));
+        v3.sourceHeaders = [...stockSheet.headers];
+        v3.linkColumn = stockSheet.groupCol;
+      } else {
+        v3.propertyRows = [];
+        v3.propertyHeaders = [];
+        v3.linkColumn = null;
+      }
       v3.tenurePairRows = [];
       v3.excludedTenureRows = [];
       v3.blockedTenurePairSet = new Set();
-      document.getElementById('v3FileSummary').textContent =
-        `${rows.length.toLocaleString()} rows · ${headers.length} columns · sheet "${sheetName}"`;
+      document.getElementById('v3FileSummary').innerHTML =
+        `${rows.length.toLocaleString()} rows · ${headers.length} columns · sheet "${escapeHtml(sheetName)}"` +
+        (stockSheet
+          ? ` · postcode lookup from "${escapeHtml(stockSheet.sheetName)}"`
+          : '');
       v3HideAggregateNotice();
     }
 
@@ -3251,6 +3325,61 @@ function v3ApplyAutoAggregate(detection) {
   v3.countCol = countCol;
 }
 
+function v3FindAssetGroupColumn(headers, rows, preferred) {
+  if (preferred && headers.includes(preferred)) return preferred;
+  if (preferred) {
+    const preferredLower = String(preferred).toLowerCase();
+    const exact = headers.find(h => String(h).toLowerCase() === preferredLower);
+    if (exact) return exact;
+  }
+  const named = headers.find(h => /asset\s*group/i.test(h));
+  if (named) return named;
+  return headers.find(h => {
+    for (const r of rows || []) {
+      const v = r[h];
+      if (v != null && String(v).indexOf('|') >= 0) return true;
+    }
+    return false;
+  }) || null;
+}
+
+function v3FindPostcodeColumn(headers) {
+  return headers.find(h => /post\s*code|postcode|postal/i.test(h)) || null;
+}
+
+function v3FindWorkbookPropertySheet(workbook, activeSheetName, preferredGroupCol) {
+  const candidates = [];
+  for (const name of (workbook?.SheetNames || [])) {
+    const parsed = parseWorkbookSheetRows(workbook, name);
+    if (!parsed) continue;
+    const postcodeCol = v3FindPostcodeColumn(parsed.headers);
+    if (!postcodeCol) continue;
+    const groupCol = v3FindAssetGroupColumn(parsed.headers, parsed.rows, preferredGroupCol);
+    if (!groupCol) continue;
+
+    let groupRows = 0;
+    const groups = new Set();
+    for (const r of parsed.rows) {
+      const groupName = fmtVal(r[groupCol]);
+      const postcode = fmtVal(r[postcodeCol]);
+      if (!groupName || !postcode) continue;
+      groupRows++;
+      groups.add(groupName);
+    }
+    if (!groupRows) continue;
+
+    let score = groupRows;
+    if (/stock|propert|list/i.test(name)) score += 100000;
+    if (preferredGroupCol && parsed.headers.includes(preferredGroupCol)) score += 50000;
+    if (name !== activeSheetName) score += 1000;
+    if (groupRows > groups.size) score += 500;
+    if (/pivot|mapping/i.test(name)) score -= 10000;
+    candidates.push({ ...parsed, groupCol, postcodeCol, score });
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0] || null;
+}
+
 function v3ShowAggregateNotice(detection, source) {
   const banner = document.getElementById('v3AggregateNotice');
   const text = document.getElementById('v3AggregateNoticeText');
@@ -3298,7 +3427,9 @@ function v3PopulateColumnSelectors() {
     o2.value = h; o2.textContent = h;
     ctSel.appendChild(o2);
   });
-  const pcHeaders = (v3.sourceHeaders && v3.sourceHeaders.length) ? v3.sourceHeaders : v3.headers;
+  const pcHeaders = (v3.propertyHeaders && v3.propertyHeaders.length)
+    ? v3.propertyHeaders
+    : ((v3.sourceHeaders && v3.sourceHeaders.length) ? v3.sourceHeaders : v3.headers);
   pcSel.appendChild(placeholder('None / not in this file'));
   const pcSeen = new Set();
   for (const h of pcHeaders) {
@@ -3335,9 +3466,7 @@ function v3PopulateColumnSelectors() {
     });
   }
   let pcGuess = '';
-  if (v3.sourceHeaders && v3.sourceHeaders.length) {
-    pcGuess = v3.sourceHeaders.find(h => /post.*code|postcode|postal/i.test(h)) || '';
-  }
+  if (pcHeaders && pcHeaders.length) pcGuess = v3FindPostcodeColumn(pcHeaders) || '';
 
   agSel.value = agGuess || '';
   ctSel.value = ctGuess || '';
@@ -3380,7 +3509,11 @@ function v3UpdateColumnHint(which) {
       : 'v3PostcodeSample';
   const target = document.getElementById(targetId);
   if (!col) { target.textContent = ''; return; }
-  const sourceRows = (which === 'postcode' && v3.sourceRows && v3.sourceRows.length) ? v3.sourceRows : v3.rows;
+  const sourceRows = which === 'postcode'
+    ? ((v3.propertyRows && v3.propertyRows.length)
+        ? v3.propertyRows
+        : ((v3.sourceRows && v3.sourceRows.length) ? v3.sourceRows : v3.rows))
+    : v3.rows;
   const samples = [];
   for (const r of sourceRows) {
     const v = fmtVal(r[col]);
@@ -3691,10 +3824,17 @@ function v3CollectBlockedTenurePairs() {
 function v3BuildPostcodeLookup() {
   if (!v3.postcodeCol) return new Map();
 
-  const sourceRows = v3.sourceRows && v3.sourceRows.length ? v3.sourceRows : [];
+  const sourceRows = (v3.propertyRows && v3.propertyRows.length)
+    ? v3.propertyRows
+    : ((v3.sourceRows && v3.sourceRows.length) ? v3.sourceRows : []);
   if (!sourceRows.length) return new Map();
 
-  const sourceGroupCol = v3.linkColumn || v3.assetGroupCol;
+  const sourceHeaders = (v3.propertyRows && v3.propertyRows.length)
+    ? v3.propertyHeaders
+    : v3.sourceHeaders;
+  const sourceGroupCol = (sourceHeaders && sourceHeaders.includes(v3.assetGroupCol))
+    ? v3.assetGroupCol
+    : (v3.linkColumn || v3FindAssetGroupColumn(sourceHeaders || [], sourceRows, v3.assetGroupCol));
   if (!sourceGroupCol) return new Map();
 
   const normalize = (v) => String(v ?? '').trim().replace(/\s+/g, '').toUpperCase();
@@ -3704,12 +3844,9 @@ function v3BuildPostcodeLookup() {
     const groupName = normalizeGroup(r[sourceGroupCol]);
     if (!groupName) continue;
     const nextCode = normalize(r[v3.postcodeCol]);
-    const existing = out.get(groupName);
-    if (!out.has(groupName)) {
-      out.set(groupName, nextCode);
-    } else if (existing !== nextCode) {
-      out.set(groupName, '');
-    }
+    if (!nextCode) continue;
+    if (!out.has(groupName)) out.set(groupName, new Set());
+    out.get(groupName).add(nextCode);
   }
   return out;
 }
@@ -3788,11 +3925,12 @@ function v3RenderMergeTable() {
     '<th>Original group</th>' +
     '<th style="text-align:right;">Properties</th>' +
     '<th>Consolidated into</th>' +
-    '<th>Reason</th>' +
+    '<th>Merge type</th>' +
+    '<th>Rationale</th>' +
     '</tr></thead><tbody>';
 
   if (!rows.length) {
-    html += `<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--muted);">No merges were applied with the current settings. Try lowering the threshold or adding more tenure pairs.</td></tr>`;
+    html += `<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--muted);">No merges were applied with the current settings. Try lowering the threshold or adding more tenure pairs.</td></tr>`;
   } else {
     for (const g of rows) {
       html += '<tr>' +
@@ -3800,6 +3938,7 @@ function v3RenderMergeTable() {
         `<td style="text-align:right; font-variant-numeric: tabular-nums;">${g.properties.toLocaleString()}</td>` +
         `<td class="highlight" style="font-weight:600;">${escapeHtml(g.mergedAssetGroup)}</td>` +
         `<td style="color:var(--muted); font-size:12px;">${escapeHtml(g.mergeSource || '')}</td>` +
+        `<td style="color:var(--muted); font-size:12px;">${escapeHtml(g.mergeRationale || '')}</td>` +
         '</tr>';
     }
   }
@@ -3884,7 +4023,7 @@ function v3BuildAggregateRowsSheet() {
 }
 
 function v3BuildMappingSheet() {
-  const headers = ['asset group v2', 'Properties', 'asset group v3', 'Merge Type'];
+  const headers = ['asset group v2', 'Properties', 'asset group v3', 'Merge Type', 'Merge Rationale'];
   const aoa = [headers];
   const groups = [...v3.processor.groups].sort((a, b) => naturalCompare(a.originalAssetGroup, b.originalAssetGroup));
   for (const g of groups) {
@@ -3894,10 +4033,11 @@ function v3BuildMappingSheet() {
       g.properties,
       g.mergedAssetGroup,
       merged ? (g.mergeSource || 'merged') : 'unchanged',
+      merged ? (g.mergeRationale || '') : '',
     ]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 60 }, { wch: 14 }, { wch: 60 }, { wch: 18 }];
+  ws['!cols'] = [{ wch: 60 }, { wch: 14 }, { wch: 60 }, { wch: 18 }, { wch: 24 }];
   return ws;
 }
 
