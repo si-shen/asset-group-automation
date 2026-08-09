@@ -51,3 +51,6 @@ logs/
 ~$*.xlsx
 ~$*.xlsm
 ~$*.docx
+
+# Removed property-level sample dataset
+Sample property data.xlsx
